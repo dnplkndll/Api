@@ -195,11 +195,13 @@ export class UserController extends MembershipBaseController {
 
       const { userId, userEmail, firstName, lastName } = req.body;
       let user: User;
+      let isNewUser = false;
 
       if (userId) user = await this.repos.user.load(userId);
       else user = await this.repos.user.loadByEmail(userEmail);
 
       if (!user) {
+        isNewUser = true;
         const timestamp = Date.now();
         user = { email: userEmail, firstName, lastName };
         user.registrationDate = new Date();
@@ -213,6 +215,7 @@ export class UserController extends MembershipBaseController {
         await UserChurchHelper.createForNewUser(user.id, user.email);
       }
       user.password = null;
+      (user as any).isNewUser = isNewUser;
       return this.json(user, 200);
     });
   }
@@ -228,33 +231,44 @@ export class UserController extends MembershipBaseController {
 
       if (user) return res.status(400).json({ errors: ["user already exists"] });
       else {
+        const regStart = Date.now();
         const tempPassword = UniqueIdHelper.shortId();
         user = { email: register.email, firstName: register.firstName, lastName: register.lastName };
         user.authGuid = v4();
         user.registrationDate = new Date();
         user.password = bcrypt.hashSync(tempPassword, 10);
+        console.log("Register: bcrypt", Date.now() - regStart, "ms");
 
         try {
+          const emailStart = Date.now();
           const timestamp = Date.now();
-          await UserHelper.sendWelcomeEmail(register.email, `/login?auth=${user.authGuid}&timestamp=${timestamp}`, register.appName, register.appUrl);
+          const emailPromises: Promise<any>[] = [];
+          emailPromises.push(UserHelper.sendWelcomeEmail(register.email, `/login?auth=${user.authGuid}&timestamp=${timestamp}`, register.appName, register.appUrl));
 
           if (Environment.emailOnRegistration) {
             const emailBody = "Name: " + register.firstName + " " + register.lastName + "<br/>Email: " + register.email + "<br/>App: " + register.appName;
-            await EmailHelper.sendTemplatedEmail(Environment.supportEmail, Environment.supportEmail, register.appName, register.appUrl, "New User Registration", emailBody);
+            emailPromises.push(EmailHelper.sendTemplatedEmail(Environment.supportEmail, Environment.supportEmail, register.appName, register.appUrl, "New User Registration", emailBody));
           }
+          await Promise.all(emailPromises);
+          console.log("Register: emails", Date.now() - emailStart, "ms");
         } catch (err) {
           return this.json({ errors: [err.toString()] });
           // return this.json({ errors: ["Email address does not exist."] })
         }
-        const userCount = await this.repos.user.loadCount();
 
+        let stepStart = Date.now();
+        const userCount = await this.repos.user.loadCount();
         user = await this.repos.user.save(user);
+        console.log("Register: save user", Date.now() - stepStart, "ms");
 
         // Create userChurch records for matching people in groups
+        stepStart = Date.now();
         await UserChurchHelper.createForNewUser(user.id, user.email);
+        console.log("Register: createForNewUser", Date.now() - stepStart, "ms");
 
         // Link pre-selected church from People record match (even if person isn't in a group)
         if (register.churchId) {
+          stepStart = Date.now();
           const existingUC = await this.repos.userChurch.loadByUserId(user.id, register.churchId);
           if (!existingUC) {
             const matchingPeople = await this.repos.person.searchEmail(register.churchId, user.email);
@@ -263,6 +277,7 @@ export class UserController extends MembershipBaseController {
               await this.repos.userChurch.save({ userId: user.id, churchId: register.churchId, personId: exactMatch.id });
             }
           }
+          console.log("Register: link churchId", Date.now() - stepStart, "ms");
         }
 
         // Add first user to server admins group
@@ -271,6 +286,7 @@ export class UserController extends MembershipBaseController {
             this.repos.roleMember.save({ roleId: roles[0].id, userId: user.id, addedBy: user.id });
           });
         }
+        console.log("Register: total", Date.now() - regStart, "ms");
       }
       user.password = null;
       return this.json(user, 200);
@@ -457,6 +473,31 @@ export class UserController extends MembershipBaseController {
       });
 
       return this.json(users, 200);
+    });
+  }
+
+  @httpPost("/sendInviteEmail")
+  public async sendInviteEmail(req: express.Request<{}, {}, { email: string; personName: string; contextName: string; churchName: string }>, res: express.Response): Promise<any> {
+    return this.actionWrapper(req, res, async (_au) => {
+      const { email, personName, contextName, churchName } = req.body;
+      if (!email || !contextName) return res.status(400).json({ errors: ["email and contextName are required"] });
+
+      let loginLink = "/";
+      let isExistingUser = false;
+      const user = await this.repos.user.loadByEmail(email);
+      if (user) {
+        isExistingUser = true;
+        user.authGuid = v4();
+        loginLink = `/login?auth=${user.authGuid}`;
+        await Promise.all([
+          this.repos.user.save(user),
+          UserHelper.sendInviteEmail(email, personName || "", contextName, churchName || "", loginLink, isExistingUser)
+        ]);
+      } else {
+        await UserHelper.sendInviteEmail(email, personName || "", contextName, churchName || "", loginLink, isExistingUser);
+      }
+
+      return this.json({ success: true }, 200);
     });
   }
 
