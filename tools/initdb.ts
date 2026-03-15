@@ -1,10 +1,12 @@
 import { Environment } from "../src/shared/helpers/Environment.js";
 import { ConnectionManager } from "../src/shared/infrastructure/ConnectionManager.js";
 import { MultiDatabasePool } from "../src/shared/infrastructure/MultiDatabasePool.js";
+import { getDialect } from "../src/shared/helpers/Dialect.js";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import mysql from "mysql2/promise";
+import postgres from "postgres";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -380,18 +382,32 @@ async function initializeSection(moduleName: string, sectionName: string, tables
 
     // Split SQL file by statements and handle various SQL delimiters
     const statements = splitSqlStatements(sql);
+    const isPg = getDialect() === "postgres";
 
     for (const statement of statements) {
-      const cleanStatement = statement.trim();
+      let cleanStatement = statement.trim();
       if (cleanStatement && !cleanStatement.startsWith('--')) {
         try {
           // Check if this is a DDL statement (CREATE/DROP PROCEDURE/FUNCTION)
           const upperStatement = cleanStatement.toUpperCase();
-          if (upperStatement.startsWith('CREATE PROCEDURE') ||
+          const isStoredProc = upperStatement.startsWith('CREATE PROCEDURE') ||
             upperStatement.startsWith('CREATE FUNCTION') ||
             upperStatement.startsWith('DROP PROCEDURE') ||
             upperStatement.startsWith('DROP FUNCTION') ||
-            upperStatement.includes('CREATE DEFINER')) {
+            upperStatement.includes('CREATE DEFINER');
+
+          // Skip MySQL stored procedures on PostgreSQL — they're inlined in repo code
+          if (isPg && isStoredProc) {
+            console.log(`   ⏭️  Skipping MySQL stored procedure (PG mode)`);
+            continue;
+          }
+
+          // Translate MySQL DDL to PostgreSQL syntax
+          if (isPg) {
+            cleanStatement = mysqlToPgSql(cleanStatement);
+          }
+
+          if (isStoredProc) {
             await MultiDatabasePool.executeDDL(moduleName, cleanStatement);
           } else {
             await MultiDatabasePool.query(moduleName, cleanStatement);
@@ -426,18 +442,29 @@ async function initializeDemoData(moduleName: string, demoTables: { title: strin
 
     const sql = fs.readFileSync(filePath, 'utf8');
     const statements = splitSqlStatements(sql);
+    const isPg = getDialect() === "postgres";
 
     for (const statement of statements) {
-      const cleanStatement = statement.trim();
+      let cleanStatement = statement.trim();
       if (cleanStatement && !cleanStatement.startsWith('--')) {
         try {
-          // Check if this is a DDL statement (CREATE/DROP PROCEDURE/FUNCTION)
           const upperStatement = cleanStatement.toUpperCase();
-          if (upperStatement.startsWith('CREATE PROCEDURE') ||
+          const isStoredProc = upperStatement.startsWith('CREATE PROCEDURE') ||
             upperStatement.startsWith('CREATE FUNCTION') ||
             upperStatement.startsWith('DROP PROCEDURE') ||
             upperStatement.startsWith('DROP FUNCTION') ||
-            upperStatement.includes('CREATE DEFINER')) {
+            upperStatement.includes('CREATE DEFINER');
+
+          if (isPg && isStoredProc) {
+            console.log(`   ⏭️  Skipping MySQL stored procedure (PG mode)`);
+            continue;
+          }
+
+          if (isPg) {
+            cleanStatement = mysqlToPgSql(cleanStatement);
+          }
+
+          if (isStoredProc) {
             await MultiDatabasePool.executeDDL(moduleName, cleanStatement);
           } else {
             await MultiDatabasePool.query(moduleName, cleanStatement);
@@ -453,6 +480,9 @@ async function initializeDemoData(moduleName: string, demoTables: { title: strin
 }
 
 async function ensureDatabaseExists(moduleName: string, dbConfig: any) {
+  if (getDialect() === "postgres") {
+    return ensurePgSchemaExists(moduleName, dbConfig);
+  }
   // Connect without specifying database to create it if needed
   const connection = await mysql.createConnection({
     host: dbConfig.host,
@@ -471,6 +501,95 @@ async function ensureDatabaseExists(moduleName: string, dbConfig: any) {
   } finally {
     await connection.end();
   }
+}
+
+async function ensurePgSchemaExists(moduleName: string, dbConfig: any) {
+  const client = postgres({
+    host: dbConfig.host,
+    port: dbConfig.port || 5432,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database: dbConfig.database,
+  });
+
+  try {
+    console.log(`   🏗️  Ensuring schema '${moduleName}' exists in database '${dbConfig.database}'...`);
+    await client.unsafe(`CREATE SCHEMA IF NOT EXISTS ${moduleName}`);
+    await client.unsafe(`SET search_path TO ${moduleName}, public`);
+    console.log(`   ✅ Schema '${moduleName}' ready`);
+  } catch (error) {
+    console.error(`   ❌ Failed to ensure schema exists for ${moduleName}:`, error);
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Translate MySQL DDL/DML to PostgreSQL-compatible syntax.
+ * Handles the common patterns found in the dbScripts SQL files.
+ */
+function mysqlToPgSql(sql: string): string {
+  let result = sql;
+  // Backtick-quoted identifiers → double-quoted
+  result = result.replace(/`([^`]+)`/g, '"$1"');
+  // ENGINE=InnoDB DEFAULT CHARSET=... COLLATE=... — strip everything after closing paren
+  result = result.replace(/\)\s*ENGINE\s*=\s*[^;]+;/gi, ');');
+  // datetime → timestamp
+  result = result.replace(/\bdatetime\b/gi, 'timestamp');
+  // BIT(1) DEFAULT 0/1/b'0'/b'1' → boolean DEFAULT false/true
+  result = result.replace(/\bBIT\(1\)\s+DEFAULT\s+(?:b'1'|1)/gi, 'boolean DEFAULT true');
+  result = result.replace(/\bBIT\(1\)\s+DEFAULT\s+(?:b'0'|0)/gi, 'boolean DEFAULT false');
+  result = result.replace(/\bBIT\(1\)/gi, 'boolean');
+  // tinyint(N) → boolean (all tinyint columns in this schema are boolean-like)
+  result = result.replace(/\btinyint\(\d+\)\s+DEFAULT\s+(?:1|b'1')/gi, 'boolean DEFAULT true');
+  result = result.replace(/\btinyint\(\d+\)\s+DEFAULT\s+(?:0|b'0')/gi, 'boolean DEFAULT false');
+  result = result.replace(/\btinyint(\(\d+\))?/gi, 'boolean');
+  // int(N) → integer (must come after tinyint to avoid double-replacing)
+  result = result.replace(/\bint\(\d+\)/gi, 'integer');
+  // float → real
+  result = result.replace(/\bfloat\b/gi, 'real');
+  // double → double precision (negative lookahead avoids 'double precision precision')
+  result = result.replace(/\bdouble\b(?!\s+precision)/gi, 'double precision');
+  // decimal(N,M) → numeric(N,M)
+  result = result.replace(/\bdecimal\b/gi, 'numeric');
+  // mediumtext / longtext / tinytext → text
+  result = result.replace(/\b(medium|long|tiny)text\b/gi, 'text');
+  // longblob / mediumblob / tinyblob → bytea
+  result = result.replace(/\b(long|medium|tiny)blob\b/gi, 'bytea');
+  // enum('a','b',...) → varchar(255)
+  result = result.replace(/\benum\s*\([^)]+\)/gi, 'varchar(255)');
+  // ON UPDATE CURRENT_TIMESTAMP — PG doesn't support this (needs trigger)
+  result = result.replace(/\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP/gi, '');
+  // DELIMITER statements (MySQL stored proc syntax)
+  if (/^\s*DELIMITER\b/i.test(result)) return '';
+  // KEY/INDEX `name` (col) — strip inline index definitions (PG uses CREATE INDEX separately)
+  result = result.replace(/,\s*(?:KEY|INDEX)\s+"[^"]+"\s*\([^)]+\)/gi, '');
+  // UNIQUE KEY `name` (col) → UNIQUE (col)
+  result = result.replace(/UNIQUE\s+KEY\s+"[^"]+"\s*\(([^)]+)\)/gi, 'UNIQUE ($1)');
+  // Standalone INDEX lines (not preceded by comma, e.g. at end of CREATE TABLE)
+  result = result.replace(/^\s*INDEX\s+"[^"]+"\s*\([^)]+\),?\s*$/gim, '');
+  // TRUNCATE TABLE — PG needs CASCADE for FK constraints
+  if (/^TRUNCATE\s+TABLE\s/i.test(result) && !result.includes('CASCADE')) {
+    result = result.replace(/;?\s*$/, ' CASCADE;');
+  }
+  // char(N) → varchar(N) (PG char pads with spaces, varchar is better)
+  result = result.replace(/\bchar\((\d+)\)/gi, 'varchar($1)');
+  // IFNULL → COALESCE
+  result = result.replace(/\bIFNULL\b/gi, 'COALESCE');
+  // NOW() stays the same in PG
+  // CURDATE() → CURRENT_DATE
+  result = result.replace(/\bCURDATE\(\)/gi, 'CURRENT_DATE');
+  // COLLATE utf8mb4_... — strip MySQL collation hints from DML
+  result = result.replace(/\s+COLLATE\s+\w+/gi, '');
+  // UUID() → gen_random_uuid()
+  result = result.replace(/\bUUID\(\)/gi, 'gen_random_uuid()');
+  // MySQL binary literals b'0'/b'1' → false/true (used in INSERT values for BIT columns)
+  result = result.replace(/\bb'1'/g, 'true');
+  result = result.replace(/\bb'0'/g, 'false');
+  // SET FOREIGN_KEY_CHECKS — no-op in PG (uses DEFERRABLE constraints)
+  if (/^\s*SET\s+FOREIGN_KEY_CHECKS\b/i.test(result)) return '';
+  return result;
 }
 
 function splitSqlStatements(sql: string): string[] {
@@ -579,6 +698,9 @@ async function resetDatabases(options: InitOptions = {}) {
 }
 
 async function resetModuleDatabase(moduleName: string, dbConfig: any) {
+  if (getDialect() === "postgres") {
+    return resetPgSchema(moduleName, dbConfig);
+  }
   const connection = await mysql.createConnection({
     host: dbConfig.host,
     user: dbConfig.user,
@@ -599,6 +721,31 @@ async function resetModuleDatabase(moduleName: string, dbConfig: any) {
     throw error;
   } finally {
     await connection.end();
+  }
+}
+
+async function resetPgSchema(moduleName: string, dbConfig: any) {
+  const client = postgres({
+    host: dbConfig.host,
+    port: dbConfig.port || 5432,
+    user: dbConfig.user,
+    password: dbConfig.password,
+    database: dbConfig.database,
+  });
+
+  try {
+    console.log(`   🗑️  Dropping schema '${moduleName}'...`);
+    await client.unsafe(`DROP SCHEMA IF EXISTS ${moduleName} CASCADE`);
+
+    console.log(`   🏗️  Creating schema '${moduleName}'...`);
+    await client.unsafe(`CREATE SCHEMA ${moduleName}`);
+
+    console.log(`   ✅ ${moduleName} schema reset completed`);
+  } catch (error) {
+    console.error(`   ❌ Failed to reset ${moduleName} schema:`, error);
+    throw error;
+  } finally {
+    await client.end();
   }
 }
 
