@@ -50,6 +50,7 @@ abstract class BaseKyselyRepo {
  */
 export abstract class KyselyRepo extends BaseKyselyRepo {
   protected readonly softDelete: boolean = false;
+  protected readonly defaultOrderBy?: string;
 
   public async save(model: any) {
     if (model.id) {
@@ -74,10 +75,10 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
     }
   }
 
-  public async loadOne(churchId: string, id: string): Promise<any> {
+  public async loadOne(churchId: string, id: string, includeRemoved = false): Promise<any> {
     let q = this.db.selectFrom(this.tableName).selectAll()
       .where("id", "=", id).where("churchId", "=", churchId);
-    if (this.softDelete) q = q.where("removed", "=", 0);
+    if (this.softDelete && !includeRemoved) q = q.where("removed", "=", 0);
     return await q.executeTakeFirst() ?? null;
   }
 
@@ -85,10 +86,12 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
     return this.loadOne(churchId, id);
   }
 
-  public async loadAll(churchId: string): Promise<any[]> {
+  public async loadAll(churchId: string, orderBy?: string): Promise<any[]> {
     let q = this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId);
     if (this.softDelete) q = q.where("removed", "=", 0);
+    const order = orderBy || this.defaultOrderBy;
+    if (order) q = q.orderBy(order as any);
     return await q.execute();
   }
 

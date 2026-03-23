@@ -1,3 +1,4 @@
+import { injectable } from "inversify";
 import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
@@ -12,6 +13,7 @@ export interface AuditLogFilter {
   offset?: number;
 }
 
+@injectable()
 export class AuditLogRepo extends KyselyRepo {
   protected readonly tableName = "auditLogs";
   protected readonly moduleName = "membership";

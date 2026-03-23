@@ -1,7 +1,9 @@
+import { injectable } from "inversify";
 import { sql } from "kysely";
 import { UniqueIdHelper } from "@churchapps/apihelper";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
+@injectable()
 export class DeviceRepo extends KyselyRepo {
   protected readonly tableName = "devices";
   protected readonly moduleName = "messaging";
