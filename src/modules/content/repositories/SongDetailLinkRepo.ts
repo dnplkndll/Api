@@ -1,45 +1,22 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { SongDetailLink } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class SongDetailLinkRepo extends ConfiguredRepo<SongDetailLink> {
-  // This table doesn't have a churchId column - it's a global table
-  protected churchIdColumn = "";
+export class SongDetailLinkRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "songDetailLinks";
+  protected readonly moduleName = "content";
 
-  protected get repoConfig(): RepoConfig<SongDetailLink> {
-    return {
-      tableName: "songDetailLinks",
-      hasSoftDelete: false,
-      churchIdColumn: "", // No churchId column in this table
-      columns: ["songDetailId", "service", "serviceKey", "url"]
-    };
+  public async loadForSongDetail(songDetailId: string) {
+    return this.db.selectFrom("songDetailLinks").selectAll()
+      .where("songDetailId", "=", songDetailId)
+      .orderBy("service")
+      .execute();
   }
 
-  public async delete(id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM songDetailLinks WHERE id=?;", [id]);
-  }
-
-  public async load(id: string): Promise<SongDetailLink> {
-    return TypedDB.queryOne("SELECT * FROM songDetailLinks WHERE id=?;", [id]);
-  }
-
-  public loadForSongDetail(songDetailId: string) {
-    return TypedDB.query("SELECT * FROM songDetailLinks WHERE songDetailId=? ORDER BY service;", [songDetailId]);
-  }
-
-  public loadByServiceAndKey(service: string, serviceKey: string) {
-    return TypedDB.queryOne("SELECT * FROM songDetailLinks WHERE service=? AND serviceKey=?;", [service, serviceKey]);
-  }
-
-  protected rowToModel(row: any): SongDetailLink {
-    return {
-      id: row.id,
-      songDetailId: row.songDetailId,
-      service: row.service,
-      serviceKey: row.serviceKey,
-      url: row.url
-    };
+  public async loadByServiceAndKey(service: string, serviceKey: string) {
+    return (await this.db.selectFrom("songDetailLinks").selectAll()
+      .where("service", "=", service)
+      .where("serviceKey", "=", serviceKey)
+      .executeTakeFirst()) ?? null;
   }
 }

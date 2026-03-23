@@ -1,41 +1,39 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ContentProviderAuth } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class ContentProviderAuthRepo extends ConfiguredRepo<ContentProviderAuth> {
-  protected get repoConfig(): RepoConfig<ContentProviderAuth> {
+export class ContentProviderAuthRepo extends KyselyRepo {
+  protected readonly tableName = "contentProviderAuths";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("contentProviderAuths").selectAll()
+      .where("churchId", "=", churchId).where("id", "in", ids).execute();
+  }
+
+  public async loadByMinistry(churchId: string, ministryId: string) {
+    return this.db.selectFrom("contentProviderAuths").selectAll()
+      .where("churchId", "=", churchId).where("ministryId", "=", ministryId).execute();
+  }
+
+  public async loadByMinistryAndProvider(churchId: string, ministryId: string, providerId: string) {
+    return await this.db.selectFrom("contentProviderAuths").selectAll()
+      .where("churchId", "=", churchId).where("ministryId", "=", ministryId).where("providerId", "=", providerId)
+      .executeTakeFirst() ?? null;
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "contentProviderAuths",
-      hasSoftDelete: false,
-      columns: ["ministryId", "providerId", "accessToken", "refreshToken", "tokenType", "expiresAt", "scope"]
-    };
-  }
-
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM contentProviderAuths WHERE churchId=? and id in (?);", [churchId, ids]);
-  }
-
-  public loadByMinistry(churchId: string, ministryId: string) {
-    return TypedDB.query("SELECT * FROM contentProviderAuths WHERE churchId=? AND ministryId=?;", [churchId, ministryId]);
-  }
-
-  public loadByMinistryAndProvider(churchId: string, ministryId: string, providerId: string) {
-    return TypedDB.queryOne("SELECT * FROM contentProviderAuths WHERE churchId=? AND ministryId=? AND providerId=?;", [churchId, ministryId, providerId]);
-  }
-
-  protected rowToModel(row: any): ContentProviderAuth {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      ministryId: row.ministryId,
-      providerId: row.providerId,
-      accessToken: row.accessToken,
-      refreshToken: row.refreshToken,
-      tokenType: row.tokenType,
-      expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
-      scope: row.scope
+      id: data.id,
+      churchId: data.churchId,
+      ministryId: data.ministryId,
+      providerId: data.providerId,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      tokenType: data.tokenType,
+      expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+      scope: data.scope
     };
   }
 }

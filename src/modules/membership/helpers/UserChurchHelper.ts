@@ -1,5 +1,7 @@
 import { Repos } from "../repositories/index.js";
-import { RepoManager, TypedDB } from "../../../shared/infrastructure/index.js";
+import { RepoManager } from "../../../shared/infrastructure/index.js";
+import { sql } from "kysely";
+import { getDb } from "../../../db/index.js";
 import { UserChurch, Person } from "../models/index.js";
 
 export class UserChurchHelper {
@@ -31,16 +33,18 @@ export class UserChurchHelper {
 
     // Single query: find people with exact email match who are in at least one group,
     // in non-archived churches, excluding churches where a userChurch already exists.
-    const sql =
-      "SELECT p.id as personId, p.churchId" +
-      " FROM people p" +
-      " INNER JOIN churches c ON c.id = p.churchId AND c.archivedDate IS NULL" +
-      " INNER JOIN groupMembers gm ON gm.personId = p.id AND gm.churchId = p.churchId" +
-      " INNER JOIN `groups` g ON g.id = gm.groupId AND g.removed = 0" +
-      " LEFT JOIN userChurches uc ON uc.userId = ? AND uc.churchId = p.churchId" +
-      " WHERE LOWER(p.email) = LOWER(?) AND p.removed = 0 AND uc.id IS NULL" +
-      " GROUP BY p.churchId, p.id";
-    const matches: Array<{ personId: string; churchId: string }> = await TypedDB.query(sql, [userId, email]);
+    const db = getDb("membership");
+    const result = await sql`
+      SELECT p.id as personId, p.churchId
+      FROM people p
+      INNER JOIN churches c ON c.id = p.churchId AND c.archivedDate IS NULL
+      INNER JOIN groupMembers gm ON gm.personId = p.id AND gm.churchId = p.churchId
+      INNER JOIN ${sql.table("groups")} g ON g.id = gm.groupId AND g.removed = 0
+      LEFT JOIN userChurches uc ON uc.userId = ${userId} AND uc.churchId = p.churchId
+      WHERE LOWER(p.email) = LOWER(${email}) AND p.removed = 0 AND uc.id IS NULL
+      GROUP BY p.churchId, p.id
+    `.execute(db);
+    const matches = result.rows as Array<{ personId: string; churchId: string }>;
 
     // Pick one person per church (first match) and save userChurch records
     const seenChurches = new Set<string>();

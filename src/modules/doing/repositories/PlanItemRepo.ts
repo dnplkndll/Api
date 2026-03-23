@@ -1,29 +1,25 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
 import { injectable } from "inversify";
-import { PlanItem } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class PlanItemRepo extends ConfiguredRepo<PlanItem> {
-  protected get repoConfig(): RepoConfig<PlanItem> {
-    return {
-      tableName: "planItems",
-      hasSoftDelete: false,
-      columns: [
-        "planId", "parentId", "sort", "itemType", "relatedId", "label", "description", "seconds", "link", "providerId", "providerPath", "providerContentPath", "thumbnailUrl"
-      ]
-    };
+export class PlanItemRepo extends KyselyRepo {
+  protected readonly tableName = "planItems";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public async deleteByPlanId(churchId: string, planId: string) {
+    await this.db.deleteFrom("planItems")
+      .where("churchId", "=", churchId).where("planId", "=", planId).execute();
   }
 
-  public deleteByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("DELETE FROM planItems WHERE churchId=? and planId=?;", [churchId, planId]);
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("planItems").selectAll()
+      .where("churchId", "=", churchId).where("id", "in", ids).execute();
   }
 
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM planItems WHERE churchId=? and id in (?);", [churchId, ids]);
-  }
-
-  public loadForPlan(churchId: string, planId: string) {
-    return TypedDB.query("SELECT * FROM planItems WHERE churchId=? and planId=? ORDER BY sort", [churchId, planId]);
+  public async loadForPlan(churchId: string, planId: string) {
+    return this.db.selectFrom("planItems").selectAll()
+      .where("churchId", "=", churchId).where("planId", "=", planId)
+      .orderBy("sort").execute();
   }
 }

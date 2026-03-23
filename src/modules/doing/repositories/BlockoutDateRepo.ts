@@ -1,51 +1,47 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
+import { sql } from "kysely";
 import { DateHelper } from "../../../shared/helpers/DateHelper.js";
-import { BlockoutDate } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class BlockoutDateRepo extends ConfiguredRepo<BlockoutDate> {
-  protected get repoConfig(): RepoConfig<BlockoutDate> {
-    return {
-      tableName: "blockoutDates",
-      hasSoftDelete: false,
-      columns: ["personId", "startDate", "endDate"]
-    };
-  }
+export class BlockoutDateRepo extends KyselyRepo {
+  protected readonly tableName = "blockoutDates";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
 
-  public save(blockoutDate: BlockoutDate) {
-    // Convert date-only fields before saving
-    const processedData = { ...blockoutDate };
+  public override async save(model: any) {
+    const processedData = { ...model };
     if (processedData.startDate) {
-      (processedData as any).startDate = DateHelper.toMysqlDateOnly(processedData.startDate);
+      processedData.startDate = DateHelper.toMysqlDateOnly(processedData.startDate);
     }
     if (processedData.endDate) {
-      (processedData as any).endDate = DateHelper.toMysqlDateOnly(processedData.endDate);
+      processedData.endDate = DateHelper.toMysqlDateOnly(processedData.endDate);
     }
     return super.save(processedData);
   }
 
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM blockoutDates WHERE churchId=? and id in (?);", [churchId, ids]);
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("blockoutDates").selectAll()
+      .where("churchId", "=", churchId).where("id", "in", ids).execute();
   }
 
-  public loadForPerson(churchId: string, personId: string) {
-    return TypedDB.query("SELECT * FROM blockoutDates WHERE churchId=? and personId=?;", [churchId, personId]);
+  public async loadForPerson(churchId: string, personId: string) {
+    return this.db.selectFrom("blockoutDates").selectAll()
+      .where("churchId", "=", churchId).where("personId", "=", personId).execute();
   }
 
-  public loadUpcoming(churchId: string) {
-    return TypedDB.query("SELECT * FROM blockoutDates WHERE churchId=? AND endDate>NOW();", [churchId]);
+  public async loadUpcoming(churchId: string) {
+    const result = await sql`SELECT * FROM blockoutDates WHERE churchId=${churchId} AND endDate>NOW()`.execute(this.db);
+    return result.rows;
   }
 
-  protected rowToModel(row: any): BlockoutDate {
+  public convertToModel(_churchId: string, data: any) {
     return {
-      id: row.id,
-      churchId: row.churchId,
-      personId: row.personId,
-      startDate: row.startDate,
-      endDate: row.endDate
+      id: data.id,
+      churchId: data.churchId,
+      personId: data.personId,
+      startDate: data.startDate,
+      endDate: data.endDate
     };
   }
 }

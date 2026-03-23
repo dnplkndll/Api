@@ -15,7 +15,7 @@ export class NotificationController extends MessagingBaseController {
   ): Promise<Notification[]> {
     return this.actionWrapper(req, res, async (au) => {
       const data = await this.repos.notification.loadByPersonId(au.churchId, personId);
-      return this.repos.notification.convertAllToModel(data as any[]);
+      return this.repos.notification.convertAllToModel(au.churchId, data as any[]);
     }) as any;
   }
 
@@ -23,7 +23,7 @@ export class NotificationController extends MessagingBaseController {
   public async loadById(@requestParam("churchId") _churchId: string, @requestParam("id") id: string, req: express.Request<{}, {}, null>, res: express.Response): Promise<Notification> {
     return this.actionWrapper(req, res, async (au) => {
       const data = await this.repos.notification.loadById(au.churchId, id);
-      return this.repos.notification.convertToModel(data);
+      return this.repos.notification.convertToModel(au.churchId, data);
     }) as any;
   }
 
@@ -36,7 +36,7 @@ export class NotificationController extends MessagingBaseController {
         promises.push(this.repos.notification.save(notification));
       }) as any;
       const result = await Promise.all(promises);
-      return this.repos.notification.convertAllToModel(result as any[]);
+      return this.repos.notification.convertAllToModel(au.churchId, result as any[]);
     }) as any;
   }
 

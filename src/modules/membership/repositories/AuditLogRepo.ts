@@ -1,7 +1,5 @@
-import { AuditLog } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { rowsToArray } from "../../../shared/helpers/DbArrayHelper.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 export interface AuditLogFilter {
   category?: string;
@@ -14,83 +12,71 @@ export interface AuditLogFilter {
   offset?: number;
 }
 
-export class AuditLogRepo extends ConfiguredRepo<AuditLog> {
-  protected get repoConfig(): RepoConfig<AuditLog> {
-    return {
-      tableName: "auditLogs",
-      hasSoftDelete: false,
-      columns: ["userId", "category", "action", "entityType", "entityId", "details", "ipAddress"],
-      insertLiterals: { created: "NOW()" }
-    };
+export class AuditLogRepo extends KyselyRepo {
+  protected readonly tableName = "auditLogs";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async save(model: any) {
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = this.createId();
+      await sql`INSERT INTO auditLogs (id, churchId, userId, category, action, entityType, entityId, details, ipAddress, created) VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.category}, ${model.action}, ${model.entityType}, ${model.entityId}, ${model.details}, ${model.ipAddress}, NOW())`.execute(this.db);
+    }
+    return model;
   }
 
-  public async create(log: AuditLog) {
+  public async create(log: any) {
     log.id = this.createId();
-    return super.create(log);
+    return this.save(log);
   }
 
-  public async loadFiltered(churchId: string, filter: AuditLogFilter): Promise<AuditLog[]> {
-    const conditions: string[] = ["churchId=?"];
-    const params: any[] = [churchId];
+  public async loadFiltered(churchId: string, filter: AuditLogFilter): Promise<any[]> {
+    let q = this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId);
 
-    if (filter.category) {
-      conditions.push("category=?");
-      params.push(filter.category);
-    }
-    if (filter.userId) {
-      conditions.push("userId=?");
-      params.push(filter.userId);
-    }
-    if (filter.entityType) {
-      conditions.push("entityType=?");
-      params.push(filter.entityType);
-    }
-    if (filter.entityId) {
-      conditions.push("entityId=?");
-      params.push(filter.entityId);
-    }
-    if (filter.startDate) {
-      conditions.push("created>=?");
-      params.push(filter.startDate);
-    }
-    if (filter.endDate) {
-      conditions.push("created<=?");
-      params.push(filter.endDate);
-    }
+    if (filter.category) q = q.where("category", "=", filter.category);
+    if (filter.userId) q = q.where("userId", "=", filter.userId);
+    if (filter.entityType) q = q.where("entityType", "=", filter.entityType);
+    if (filter.entityId) q = q.where("entityId", "=", filter.entityId);
+    if (filter.startDate) q = q.where("created", ">=", filter.startDate);
+    if (filter.endDate) q = q.where("created", "<=", filter.endDate);
 
     const limit = Math.max(1, Math.min(filter.limit || 100, 1000));
     const offset = Math.max(0, filter.offset || 0);
-    const sql = `SELECT * FROM auditLogs WHERE ${conditions.join(" AND ")} ORDER BY created DESC LIMIT ${limit} OFFSET ${offset};`;
-    return rowsToArray(await TypedDB.query(sql, params));
+
+    return q.orderBy("created", "desc").limit(limit).offset(offset).execute();
   }
 
-  public async loadForPerson(churchId: string, personId: string, limit: number = 100, offset: number = 0): Promise<AuditLog[]> {
+  public async loadForPerson(churchId: string, personId: string, limit: number = 100, offset: number = 0): Promise<any[]> {
     const safeLimit = Math.max(1, Math.min(limit, 1000));
     const safeOffset = Math.max(0, offset);
-    const sql = `SELECT al.* FROM auditLogs al
-      WHERE al.churchId=? AND (al.userId=? OR (al.entityType='person' AND al.entityId=?))
-      ORDER BY al.created DESC LIMIT ${safeLimit} OFFSET ${safeOffset};`;
-    return rowsToArray(await TypedDB.query(sql, [churchId, personId, personId]));
+    const result = await sql`SELECT al.* FROM auditLogs al
+      WHERE al.churchId=${churchId} AND (al.userId=${personId} OR (al.entityType='person' AND al.entityId=${personId}))
+      ORDER BY al.created DESC LIMIT ${sql.lit(safeLimit)} OFFSET ${sql.lit(safeOffset)}`.execute(this.db);
+    return result.rows as any[];
   }
 
   public async loadCount(churchId: string, filter: AuditLogFilter): Promise<number> {
-    const conditions: string[] = ["churchId=?"];
-    const params: any[] = [churchId];
+    let q = this.db.selectFrom(this.tableName)
+      .select(this.db.fn.countAll().as("count"))
+      .where("churchId", "=", churchId);
 
-    if (filter.category) { conditions.push("category=?"); params.push(filter.category); }
-    if (filter.userId) { conditions.push("userId=?"); params.push(filter.userId); }
-    if (filter.entityType) { conditions.push("entityType=?"); params.push(filter.entityType); }
-    if (filter.entityId) { conditions.push("entityId=?"); params.push(filter.entityId); }
-    if (filter.startDate) { conditions.push("created>=?"); params.push(filter.startDate); }
-    if (filter.endDate) { conditions.push("created<=?"); params.push(filter.endDate); }
+    if (filter.category) q = q.where("category", "=", filter.category);
+    if (filter.userId) q = q.where("userId", "=", filter.userId);
+    if (filter.entityType) q = q.where("entityType", "=", filter.entityType);
+    if (filter.entityId) q = q.where("entityId", "=", filter.entityId);
+    if (filter.startDate) q = q.where("created", ">=", filter.startDate);
+    if (filter.endDate) q = q.where("created", "<=", filter.endDate);
 
-    const sql = `SELECT COUNT(*) as count FROM auditLogs WHERE ${conditions.join(" AND ")};`;
-    const result = await TypedDB.queryOne(sql, params);
-    return result?.count || 0;
+    const result = await q.executeTakeFirst();
+    return Number((result as any)?.count) || 0;
   }
 
   public async deleteOld(days: number = 365): Promise<void> {
-    const sql = `DELETE FROM auditLogs WHERE created < DATE_SUB(NOW(), INTERVAL ? DAY);`;
-    await TypedDB.query(sql, [days]);
+    await sql`DELETE FROM auditLogs WHERE created < DATE_SUB(NOW(), INTERVAL ${sql.lit(days)} DAY)`.execute(this.db);
   }
 }

@@ -1,33 +1,33 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Answer } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class AnswerRepo extends ConfiguredRepo<Answer> {
-  protected get repoConfig(): RepoConfig<Answer> {
+export class AnswerRepo extends KyselyRepo {
+  protected readonly tableName = "answers";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async deleteForSubmission(churchId: string, formSubmissionId: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("churchId", "=", churchId)
+      .where("formSubmissionId", "=", formSubmissionId)
+      .execute();
+  }
+
+  public async loadForFormSubmission(churchId: string, formSubmissionId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("formSubmissionId", "=", formSubmissionId)
+      .execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "answers",
-      hasSoftDelete: false,
-      columns: ["formSubmissionId", "questionId", "value"]
-    };
-  }
-
-  public deleteForSubmission(churchId: string, formSubmissionId: string) {
-    return TypedDB.query("DELETE FROM answers WHERE churchId=? AND formSubmissionId=?;", [churchId, formSubmissionId]);
-  }
-
-  public loadForFormSubmission(churchId: string, formSubmissionId: string) {
-    return TypedDB.query("SELECT * FROM answers WHERE churchId=? AND formSubmissionId=?;", [churchId, formSubmissionId]);
-  }
-
-  protected rowToModel(row: any): Answer {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      formSubmissionId: row.formSubmissionId,
-      questionId: row.questionId,
-      value: row.value
+      id: data.id,
+      churchId: data.churchId,
+      formSubmissionId: data.formSubmissionId,
+      questionId: data.questionId,
+      value: data.value
     };
   }
 }

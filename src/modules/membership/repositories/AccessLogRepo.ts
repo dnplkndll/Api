@@ -1,21 +1,29 @@
 import { injectable } from "inversify";
-import { AccessLog } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class AccessLogRepo extends ConfiguredRepo<AccessLog> {
-  protected get repoConfig(): RepoConfig<AccessLog> {
-    return {
-      tableName: "accessLogs",
-      hasSoftDelete: false,
-      columns: ["userId", "appName"],
-      insertLiterals: { loginTime: "NOW()" }
-    };
+export class AccessLogRepo extends KyselyRepo {
+  protected readonly tableName = "accessLogs";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async save(model: any) {
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = this.createId();
+      const result = await sql`INSERT INTO accessLogs (id, churchId, userId, appName, loginTime) VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.appName}, NOW())`.execute(this.db);
+      return model;
+    }
+    return model;
   }
 
   // For compatibility with existing controllers
-  public async create(log: AccessLog) {
+  public async create(log: any) {
     log.id = this.createId();
-    return super.create(log);
+    return this.save(log);
   }
 }

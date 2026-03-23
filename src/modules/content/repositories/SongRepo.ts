@@ -1,47 +1,23 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Song } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class SongRepo extends ConfiguredRepo<Song> {
-  protected get repoConfig(): RepoConfig<Song> {
-    return {
-      tableName: "songs",
-      hasSoftDelete: false,
-      columns: ["name", "dateAdded"]
-    };
+export class SongRepo extends KyselyRepo {
+  protected readonly tableName = "songs";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
+
+  public async loadAll(churchId: string) {
+    return this.db.selectFrom("songs").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("name")
+      .execute();
   }
 
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM songs WHERE churchId=? AND id=?;", [churchId, id]);
-  }
-
-  public async loadAll(churchId: string): Promise<Song[]> {
-    return TypedDB.query("SELECT * FROM songs WHERE churchId=? ORDER BY name;", [churchId]);
-  }
-
-  public async load(churchId: string, id: string): Promise<Song> {
-    return TypedDB.queryOne("SELECT * FROM songs WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  public search(churchId: string, query: string) {
+  public async search(churchId: string, query: string) {
     const q = "%" + query.replace(/ /g, "%") + "%";
-    const sql =
-      "SELECT sd.*, ak.id as arrangementKeyId, ak.keySignature as arrangementKeySignature, ak.shortDescription FROM songs s" +
-      " INNER JOIN arrangements a on a.songId=s.id" +
-      " INNER JOIN arrangementKeys ak on ak.arrangementId=a.id" +
-      " INNER JOIN songDetails sd on sd.id=a.songDetailId" +
-      " where s.churchId=? AND (concat(sd.title, ' ', sd.artist) like ? or concat(sd.artist, ' ', sd.title) like ?);";
-    return TypedDB.query(sql, [churchId, q, q]);
-  }
-
-  protected rowToModel(row: any): Song {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      name: row.name,
-      dateAdded: row.dateAdded
-    };
+    const result = await sql`SELECT sd.*, ak.id as arrangementKeyId, ak.keySignature as arrangementKeySignature, ak.shortDescription FROM songs s INNER JOIN arrangements a on a.songId=s.id INNER JOIN arrangementKeys ak on ak.arrangementId=a.id INNER JOIN songDetails sd on sd.id=a.songDetailId where s.churchId=${churchId} AND (concat(sd.title, ' ', sd.artist) like ${q} or concat(sd.artist, ' ', sd.title) like ${q})`.execute(this.db);
+    return result.rows as any[];
   }
 }

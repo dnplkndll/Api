@@ -1,30 +1,20 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { BibleChapter } from "../models/index.js";
-import { GlobalConfiguredRepo, GlobalRepoConfig } from "../../../shared/infrastructure/GlobalConfiguredRepo.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class BibleChapterRepo extends GlobalConfiguredRepo<BibleChapter> {
-  protected get repoConfig(): GlobalRepoConfig<BibleChapter> {
-    return {
-      tableName: "bibleChapters",
-      hasSoftDelete: false,
-      columns: ["translationKey", "bookKey", "keyName", "number"],
-      defaultOrderBy: "number"
-    };
+export class BibleChapterRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "bibleChapters";
+  protected readonly moduleName = "content";
+
+  public async loadAll() {
+    return this.db.selectFrom("bibleChapters").selectAll().orderBy("number").execute();
   }
 
-  public loadByBook(translationKey: string, bookKey: string) {
-    return TypedDB.query("SELECT * FROM bibleChapters WHERE translationKey=? and bookKey=? order by number;", [translationKey, bookKey]);
-  }
-
-  protected rowToModel(row: any): BibleChapter {
-    return {
-      id: row.id,
-      translationKey: row.translationKey,
-      bookKey: row.bookKey,
-      keyName: row.keyName,
-      number: row.number
-    };
+  public async loadByBook(translationKey: string, bookKey: string) {
+    return this.db.selectFrom("bibleChapters").selectAll()
+      .where("translationKey", "=", translationKey)
+      .where("bookKey", "=", bookKey)
+      .orderBy("number")
+      .execute();
   }
 }

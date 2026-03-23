@@ -1,151 +1,88 @@
-import { DateHelper } from "@churchapps/apihelper";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Event } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { DateHelper, UniqueIdHelper } from "@churchapps/apihelper";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import { injectable } from "inversify";
 
 @injectable()
-export class EventRepo extends ConfiguredRepo<Event> {
-  protected get repoConfig(): RepoConfig<Event> {
-    return {
-      tableName: "events",
-      hasSoftDelete: false,
-      columns: [
-        "groupId",
-        "allDay",
-        "start",
-        "end",
-        "title",
-        "description",
-        "visibility",
-        "recurrenceRule",
-        "registrationEnabled",
-        "capacity",
-        "registrationOpenDate",
-        "registrationCloseDate",
-        "tags",
-        "formId"
-      ]
-    };
-  }
+export class EventRepo extends KyselyRepo {
+  protected readonly tableName = "events";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-  // Override to use TypedDB instead of DB
-  protected async create(model: Event): Promise<Event> {
-    const m: any = model as any;
-    if (!m[this.idColumn]) m[this.idColumn] = this.createId();
-    // Convert dates before insert
-    if (m.start) {
-      m.start = DateHelper.toMysqlDate(m.start);
+  public async save(model: any) {
+    if (model.start) model.start = DateHelper.toMysqlDate(model.start);
+    if (model.end) model.end = DateHelper.toMysqlDate(model.end);
+    if (model.registrationOpenDate) model.registrationOpenDate = DateHelper.toMysqlDate(model.registrationOpenDate);
+    if (model.registrationCloseDate) model.registrationCloseDate = DateHelper.toMysqlDate(model.registrationCloseDate);
+
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable("events").set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await this.db.insertInto("events").values(model).execute();
     }
-    if (m.end) {
-      m.end = DateHelper.toMysqlDate(m.end);
-    }
-    if (m.registrationOpenDate) {
-      m.registrationOpenDate = DateHelper.toMysqlDate(m.registrationOpenDate);
-    }
-    if (m.registrationCloseDate) {
-      m.registrationCloseDate = DateHelper.toMysqlDate(m.registrationCloseDate);
-    }
-    const { sql, params } = this.buildInsert(model);
-    await TypedDB.query(sql, params);
     return model;
   }
 
-  protected async update(model: Event): Promise<Event> {
-    const m: any = model as any;
-    // Convert dates before update
-    if (m.start) {
-      m.start = DateHelper.toMysqlDate(m.start);
-    }
-    if (m.end) {
-      m.end = DateHelper.toMysqlDate(m.end);
-    }
-    if (m.registrationOpenDate) {
-      m.registrationOpenDate = DateHelper.toMysqlDate(m.registrationOpenDate);
-    }
-    if (m.registrationCloseDate) {
-      m.registrationCloseDate = DateHelper.toMysqlDate(m.registrationCloseDate);
-    }
-    const { sql, params } = this.buildUpdate(model);
-    await TypedDB.query(sql, params);
-    return model;
+  public async loadAll(churchId: string) {
+    return this.db.selectFrom("events").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("start")
+      .execute();
   }
 
   public async loadTimelineGroup(churchId: string, groupId: string, eventIds: string[]) {
-    let sql = "select *, 'event' as postType, id as postId from events" + " where churchId=? AND ((" + " groupId = ?" + " and (end>curdate() or recurrenceRule IS NOT NULL)" + ")";
-    if (eventIds.length > 0) sql += " OR id IN (?)";
-    sql += ")";
-    const params: any = [churchId, groupId];
-    if (eventIds.length > 0) params.push(eventIds);
-    const result = await TypedDB.query(sql, params);
-    return result;
+    let q = sql`select *, 'event' as postType, id as postId from events where churchId=${churchId} AND ((groupId = ${groupId} and (end>curdate() or recurrenceRule IS NOT NULL))`;
+    if (eventIds.length > 0) {
+      q = sql`${q} OR id IN (${sql.join(eventIds)})`;
+    }
+    q = sql`${q})`;
+    const result = await q.execute(this.db);
+    return result.rows as any[];
   }
 
   public async loadTimeline(churchId: string, groupIds: string[], eventIds: string[]) {
-    let sql =
-      "select *, 'event' as postType, id as postId from events" +
-      " where churchId=? AND ((" +
-      "  (" +
-      "    groupId IN (?)" +
-      "    OR groupId IN (SELECT groupId FROM curatedEvents WHERE churchId=? AND eventId IS NULL)" +
-      "    OR id IN (SELECT eventId from curatedEvents WHERE churchId=?)" +
-      "  )" +
-      "  and (end>curdate() or recurrenceRule IS NOT NULL)" +
-      ")";
-    if (eventIds.length > 0) sql += " OR id IN (?)";
-    sql += ")";
-    const params = [churchId, groupIds, churchId, churchId];
-    if (eventIds.length > 0) params.push(eventIds);
-    const result = await TypedDB.query(sql, params);
-    return result;
+    let q = sql`select *, 'event' as postType, id as postId from events where churchId=${churchId} AND (((groupId IN (${sql.join(groupIds)}) OR groupId IN (SELECT groupId FROM curatedEvents WHERE churchId=${churchId} AND eventId IS NULL) OR id IN (SELECT eventId from curatedEvents WHERE churchId=${churchId})) and (end>curdate() or recurrenceRule IS NOT NULL))`;
+    if (eventIds.length > 0) {
+      q = sql`${q} OR id IN (${sql.join(eventIds)})`;
+    }
+    q = sql`${q})`;
+    const result = await q.execute(this.db);
+    return result.rows as any[];
   }
 
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM events WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadForGroup(churchId: string, groupId: string) {
+    return this.db.selectFrom("events").selectAll()
+      .where("groupId", "=", groupId)
+      .where("churchId", "=", churchId)
+      .orderBy("start")
+      .execute();
   }
 
-  public async load(churchId: string, id: string): Promise<Event> {
-    return TypedDB.queryOne("SELECT * FROM events WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadPublicForGroup(churchId: string, groupId: string) {
+    return this.db.selectFrom("events").selectAll()
+      .where("groupId", "=", groupId)
+      .where("churchId", "=", churchId)
+      .where("visibility", "=", "public")
+      .orderBy("start")
+      .execute();
   }
 
-  public async loadAll(churchId: string): Promise<Event[]> {
-    return TypedDB.query("SELECT * FROM events WHERE churchId=? ORDER BY start;", [churchId]);
+  public async loadByTag(churchId: string, tag: string) {
+    return this.db.selectFrom("events").selectAll()
+      .where("churchId", "=", churchId)
+      .where("tags", "like", "%" + tag + "%")
+      .orderBy("start")
+      .execute();
   }
 
-  public loadForGroup(churchId: string, groupId: string) {
-    return TypedDB.query("SELECT * FROM events WHERE groupId=? AND churchId=? order by start;", [groupId, churchId]);
-  }
-
-  public loadPublicForGroup(churchId: string, groupId: string) {
-    return TypedDB.query("SELECT * FROM events WHERE groupId=? AND churchId=? and visibility='public' order by start;", [groupId, churchId]);
-  }
-
-  public async loadByTag(churchId: string, tag: string): Promise<Event[]> {
-    return TypedDB.query("SELECT * FROM events WHERE churchId=? AND tags LIKE ? ORDER BY start;", [churchId, "%" + tag + "%"]);
-  }
-
-  public async loadRegistrationEnabled(churchId: string): Promise<Event[]> {
-    return TypedDB.query("SELECT * FROM events WHERE churchId=? AND registrationEnabled=1 ORDER BY start;", [churchId]);
-  }
-
-  protected rowToModel(row: any): Event {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      groupId: row.groupId,
-      allDay: row.allDay,
-      start: row.start,
-      end: row.end,
-      title: row.title,
-      description: row.description,
-      visibility: row.visibility,
-      recurrenceRule: row.recurrenceRule,
-      registrationEnabled: row.registrationEnabled,
-      capacity: row.capacity,
-      registrationOpenDate: row.registrationOpenDate,
-      registrationCloseDate: row.registrationCloseDate,
-      tags: row.tags,
-      formId: row.formId
-    };
+  public async loadRegistrationEnabled(churchId: string) {
+    return this.db.selectFrom("events").selectAll()
+      .where("churchId", "=", churchId)
+      .where("registrationEnabled", "=", 1)
+      .orderBy("start")
+      .execute();
   }
 }

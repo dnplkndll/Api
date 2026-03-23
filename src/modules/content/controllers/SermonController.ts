@@ -119,7 +119,7 @@ export class SermonController extends ContentBaseController {
   @httpGet("/public/tvFeed/:churchId")
   public async getTvFeed(@requestParam("churchId") churchId: string, req: express.Request<{}, {}, null>, res: express.Response): Promise<any> {
     return this.actionWrapperAnon(req, res, async () => {
-      const playlists: Playlist[] = await this.repos.playlist.loadPublicAll(churchId);
+      const playlists = await this.repos.playlist.loadPublicAll(churchId) as any as Playlist[];
       const sermons = await this.repos.sermon.loadPublicAll(churchId);
 
       const result: any = {

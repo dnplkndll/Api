@@ -1,31 +1,18 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { BibleBook } from "../models/index.js";
-import { GlobalConfiguredRepo, GlobalRepoConfig } from "../../../shared/infrastructure/GlobalConfiguredRepo.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class BibleBookRepo extends GlobalConfiguredRepo<BibleBook> {
-  protected get repoConfig(): GlobalRepoConfig<BibleBook> {
-    return {
-      tableName: "bibleBooks",
-      hasSoftDelete: false,
-      columns: ["translationKey", "keyName", "abbreviation", "name", "sort"],
-      defaultOrderBy: "sort"
-    };
-  }
+export class BibleBookRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "bibleBooks";
+  protected readonly moduleName = "content";
 
-  public loadAll(translationKey: string) {
-    return TypedDB.query("SELECT * FROM bibleBooks WHERE translationKey=? order by sort;", [translationKey]);
-  }
-
-  protected rowToModel(row: any): BibleBook {
-    return {
-      id: row.id,
-      translationKey: row.translationKey,
-      keyName: row.keyName,
-      abbreviation: row.abbreviation,
-      name: row.name,
-      sort: row.sort
-    };
+  public async loadAll(translationKey?: string) {
+    if (translationKey) {
+      return this.db.selectFrom("bibleBooks").selectAll()
+        .where("translationKey", "=", translationKey)
+        .orderBy("sort")
+        .execute();
+    }
+    return this.db.selectFrom("bibleBooks").selectAll().orderBy("sort").execute();
   }
 }

@@ -1,33 +1,28 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { PlanType } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class PlanTypeRepo extends ConfiguredRepo<PlanType> {
-  protected get repoConfig(): RepoConfig<PlanType> {
+export class PlanTypeRepo extends KyselyRepo {
+  protected readonly tableName = "planTypes";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("planTypes").selectAll()
+      .where("churchId", "=", churchId).where("id", "in", ids).execute();
+  }
+
+  public async loadByMinistryId(churchId: string, ministryId: string) {
+    return this.db.selectFrom("planTypes").selectAll()
+      .where("churchId", "=", churchId).where("ministryId", "=", ministryId).execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "planTypes",
-      hasSoftDelete: false,
-      columns: ["ministryId", "name"]
-    };
-  }
-
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM planTypes WHERE churchId=? and id in (?);", [churchId, ids]);
-  }
-
-  public loadByMinistryId(churchId: string, ministryId: string) {
-    return TypedDB.query("SELECT * FROM planTypes WHERE churchId=? AND ministryId=?;", [churchId, ministryId]);
-  }
-
-  protected rowToModel(row: any): PlanType {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      ministryId: row.ministryId,
-      name: row.name
+      id: data.id,
+      churchId: data.churchId,
+      ministryId: data.ministryId,
+      name: data.name
     };
   }
 }

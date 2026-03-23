@@ -1,56 +1,49 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
+import { sql } from "kysely";
+import { UniqueIdHelper } from "@churchapps/apihelper";
 import { Gateway } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class GatewayRepo extends ConfiguredRepo<Gateway> {
-  protected get repoConfig(): RepoConfig<Gateway> {
-    return {
-      tableName: "gateways",
-      hasSoftDelete: false,
-      columns: [
-        "provider", "publicKey", "privateKey", "webhookKey", "productId", "payFees", "currency", "settings", "environment"
-      ]
-    };
+export class GatewayRepo extends KyselyRepo {
+  protected readonly tableName = "gateways";
+  protected readonly moduleName = "giving";
+  protected readonly softDelete = false;
+
+  public override async save(model: any) {
+    if (model.id) {
+      return this.updateGateway(model);
+    } else {
+      return this.createGateway(model);
+    }
   }
 
-  // Override create to handle the custom logic
-  protected async create(gateway: Gateway): Promise<Gateway> {
-    gateway.id = this.createId();
-    await TypedDB.query("DELETE FROM gateways WHERE churchId=? AND id<>?;", [gateway.churchId, gateway.id]); // enforce a single record per church (for now)
-    const sql = "INSERT INTO gateways (id, churchId, provider, publicKey, privateKey, webhookKey, productId, payFees, currency, settings, environment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+  private async createGateway(gateway: any) {
+    gateway.id = UniqueIdHelper.shortId();
+    // enforce a single record per church (for now)
+    await this.db.deleteFrom("gateways")
+      .where("churchId", "=", gateway.churchId).where("id", "<>", gateway.id).execute();
     const settings = gateway.settings ? JSON.stringify(gateway.settings) : null;
-    const params = [
-      gateway.id, gateway.churchId, gateway.provider, gateway.publicKey, gateway.privateKey, gateway.webhookKey, gateway.productId, gateway.payFees, gateway.currency, settings, gateway.environment
-    ];
-    await TypedDB.query(sql, params);
+    await this.db.insertInto("gateways").values({
+      id: gateway.id, churchId: gateway.churchId, provider: gateway.provider,
+      publicKey: gateway.publicKey, privateKey: gateway.privateKey, webhookKey: gateway.webhookKey,
+      productId: gateway.productId, payFees: gateway.payFees, currency: gateway.currency,
+      settings, environment: gateway.environment
+    }).execute();
     return gateway;
   }
 
-  protected async update(gateway: Gateway): Promise<Gateway> {
-    const sql =
-      "UPDATE gateways SET provider=?, publicKey=?, privateKey=?, webhookKey=?, productId=?, payFees=?, currency=?, settings=?, environment=? WHERE id=? AND churchId=?";
+  private async updateGateway(gateway: any) {
     const settings = gateway.settings ? JSON.stringify(gateway.settings) : null;
-    const params = [
-      gateway.provider,
-      gateway.publicKey,
-      gateway.privateKey,
-      gateway.webhookKey,
-      gateway.productId,
-      gateway.payFees,
-      gateway.currency,
-      settings,
-      gateway.environment,
-      gateway.id,
-      gateway.churchId
-    ];
-    await TypedDB.query(sql, params);
+    await this.db.updateTable("gateways").set({
+      provider: gateway.provider, publicKey: gateway.publicKey, privateKey: gateway.privateKey,
+      webhookKey: gateway.webhookKey, productId: gateway.productId, payFees: gateway.payFees,
+      currency: gateway.currency, settings, environment: gateway.environment
+    }).where("id", "=", gateway.id).where("churchId", "=", gateway.churchId).execute();
     return gateway;
   }
 
-  protected rowToModel(data: any): Gateway {
+  private rowToModel(data: any): Gateway {
     return {
       id: data.id,
       churchId: data.churchId,
@@ -75,13 +68,9 @@ export class GatewayRepo extends ConfiguredRepo<Gateway> {
     return safeModel;
   }
 
-  public convertAllToModel(churchId: string, data: any) {
-    return data.map((row: any) => this.convertToModel(churchId, row));
-  }
-
   public async loadByProvider(provider: string): Promise<Gateway[]> {
-    const sql = "SELECT * FROM gateways WHERE LOWER(provider) = LOWER(?);";
-    return this.mapToModels(await TypedDB.query(sql, [provider]));
+    const result = await sql`SELECT * FROM gateways WHERE LOWER(provider) = LOWER(${provider})`.execute(this.db);
+    return (result.rows as any[]).map((r: any) => this.rowToModel(r));
   }
 
   private parseJson(value: unknown) {

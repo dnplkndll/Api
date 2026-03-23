@@ -1,45 +1,64 @@
 import { injectable } from "inversify";
 import { ArrayHelper } from "@churchapps/apihelper";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Setting } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class SettingRepo extends ConfiguredRepo<Setting> {
-  protected get repoConfig(): RepoConfig<Setting> {
-    return {
-      tableName: "settings",
-      hasSoftDelete: false,
-      columns: ["userId", "keyName", "value", "public"]
-    };
+export class SettingRepo extends KyselyRepo {
+  protected readonly tableName = "settings";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
+
+  public async deleteForUser(churchId: string, userId: string, id: string) {
+    await this.db.deleteFrom("settings")
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .where("userId", "=", userId)
+      .execute();
   }
 
-  public deleteForUser(churchId: string, userId: string, id: string) {
-    return TypedDB.query("DELETE FROM settings WHERE id=? and churchId=? and userId=?;", [id, churchId, userId]);
+  public async loadAll(churchId: string) {
+    return this.db.selectFrom("settings").selectAll()
+      .where("churchId", "=", churchId)
+      .where("userId", "is", null)
+      .execute();
   }
 
-  public loadAll(churchId: string) {
-    return TypedDB.query("SELECT * FROM settings WHERE churchId=? and userId is null;", [churchId]);
+  public async loadUser(churchId: string, userId: string) {
+    return this.db.selectFrom("settings").selectAll()
+      .where("churchId", "=", churchId)
+      .where("userId", "=", userId)
+      .execute();
   }
 
-  public loadUser(churchId: string, userId: string) {
-    return TypedDB.query("SELECT * FROM settings WHERE churchId=? and userId=?;", [churchId, userId]);
+  public async loadPublicSettings(churchId: string) {
+    return this.db.selectFrom("settings").selectAll()
+      .where("churchId", "=", churchId)
+      .where("public", "=", 1)
+      .execute();
   }
 
-  public loadPublicSettings(churchId: string) {
-    return TypedDB.query("SELECT * FROM settings WHERE churchId=? AND public=?", [churchId, 1]);
+  public async loadAllPublicSettings() {
+    return this.db.selectFrom("settings").selectAll()
+      .where("public", "=", 1)
+      .where("userId", "is", null)
+      .execute();
   }
 
-  public loadAllPublicSettings() {
-    return TypedDB.query("SELECT * FROM settings WHERE public=1 and userId is null;", []);
+  public async loadMulipleChurches(keyNames: string[], churchIds: string[]) {
+    return this.db.selectFrom("settings").selectAll()
+      .where("keyName", "in", keyNames)
+      .where("churchId", "in", churchIds)
+      .where("public", "=", 1)
+      .where("userId", "is", null)
+      .execute();
   }
 
-  public loadMulipleChurches(keyNames: string[], churchIds: string[]) {
-    return TypedDB.query("SELECT * FROM settings WHERE keyName in (?) AND churchId IN (?) AND public=1 and userId is null", [keyNames, churchIds]);
-  }
-
-  public loadByKeyNames(churchId: string, keyNames: string[]) {
-    return TypedDB.query("SELECT * FROM settings WHERE keyName in (?) AND churchId=? and userId is null;", [keyNames, churchId]);
+  public async loadByKeyNames(churchId: string, keyNames: string[]) {
+    return this.db.selectFrom("settings").selectAll()
+      .where("keyName", "in", keyNames)
+      .where("churchId", "=", churchId)
+      .where("userId", "is", null)
+      .execute();
   }
 
   public getImports(data: any[], type?: string, playlistId?: string, channelId?: string) {
@@ -101,16 +120,5 @@ export class SettingRepo extends ConfiguredRepo<Setting> {
       });
     });
     return result;
-  }
-
-  protected rowToModel(row: any): Setting {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      userId: row.userId,
-      keyName: row.keyName,
-      value: row.value,
-      public: row.public
-    };
   }
 }

@@ -1,19 +1,14 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Conjunction } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class ConjunctionRepo extends ConfiguredRepo<Conjunction> {
-  protected get repoConfig(): RepoConfig<Conjunction> {
-    return {
-      tableName: "conjunctions",
-      hasSoftDelete: false,
-      columns: ["automationId", "parentId", "groupType"]
-    };
-  }
+export class ConjunctionRepo extends KyselyRepo {
+  protected readonly tableName = "conjunctions";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
 
-  public loadForAutomation(churchId: string, automationId: string) {
-    return TypedDB.query("SELECT * FROM conjunctions WHERE automationId=? AND churchId=?;", [automationId, churchId]);
+  public async loadForAutomation(churchId: string, automationId: string) {
+    return this.db.selectFrom("conjunctions").selectAll()
+      .where("automationId", "=", automationId).where("churchId", "=", churchId).execute();
   }
 }

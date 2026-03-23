@@ -18,8 +18,8 @@ export class PreviewController extends ContentBaseController {
       const promises: Promise<any>[] = [];
       promises.push(this.repos.link.loadByCategory(churchId, "streamingTab").then((d) => (tabs = d)));
       promises.push(this.repos.link.loadByCategory(churchId, "streamingLink").then((d) => (links = d)));
-      promises.push(this.repos.streamingService.loadAll(churchId).then((d) => (services = d)));
-      promises.push(this.repos.sermon.loadAll(churchId).then((d) => (sermons = d)));
+      promises.push(this.repos.streamingService.loadAll(churchId).then((d) => (services = d as any)));
+      promises.push(this.repos.sermon.loadAll(churchId).then((d) => (sermons = d as any)));
       await Promise.all(promises);
 
       const result = StreamingConfigHelper.generateJson(churchId, tabs, links, services, sermons);

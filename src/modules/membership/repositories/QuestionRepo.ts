@@ -1,82 +1,98 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
+import { sql } from "kysely";
 import { Question } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class QuestionRepo extends ConfiguredRepo<Question> {
-  protected get repoConfig(): RepoConfig<Question> {
-    return {
-      tableName: "questions",
-      hasSoftDelete: true,
-      removedColumn: "removed",
-      columns: [
-        "formId", "parentId", "title", "description", "fieldType", "placeholder", "sort", "required", "choices"
-      ],
-      insertLiterals: { removed: "0" }
-    };
-  }
-  protected async create(question: Question): Promise<Question> {
-    (question as any).choices = JSON.stringify(question.choices);
-    return super.create(question);
-  }
+export class QuestionRepo extends KyselyRepo {
+  protected readonly tableName = "questions";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = true;
 
-  protected async update(question: Question): Promise<Question> {
-    (question as any).choices = JSON.stringify(question.choices);
-    return super.update(question);
+  public async save(model: any) {
+    const choices = JSON.stringify(model.choices);
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      setData.choices = choices;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = this.createId();
+      await this.db.insertInto(this.tableName).values({
+        ...model,
+        choices,
+        removed: 0
+      }).execute();
+    }
+    return model;
   }
 
   public async delete(churchId: string, id: string) {
-    const question = (await TypedDB.queryOne("SELECT formId, sort FROM questions WHERE id=?", [id])) as {
-      formId: string;
-      sort: number;
-    };
-    await TypedDB.query("UPDATE questions SET sort=sort-1 WHERE formId=? AND sort>?;", [question.formId, +question.sort]);
-    return TypedDB.query("UPDATE questions SET sort=CONCAT('d', sort), removed=1 WHERE id=? AND churchId=?;", [id, churchId]);
+    const question = await this.db.selectFrom(this.tableName)
+      .select(["formId", "sort"])
+      .where("id", "=", id)
+      .executeTakeFirst();
+    if (question) {
+      await sql`UPDATE questions SET sort=sort-1 WHERE formId=${question.formId} AND sort>${+question.sort}`.execute(this.db);
+      await sql`UPDATE questions SET sort=CONCAT('d', sort), removed=1 WHERE id=${id} AND churchId=${churchId}`.execute(this.db);
+    }
   }
 
-  public loadForForm(churchId: string, formId: string) {
-    return TypedDB.query("SELECT * FROM questions WHERE churchId=? AND formId=? AND removed=0 ORDER BY sort;", [churchId, formId]);
+  public async loadForForm(churchId: string, formId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("formId", "=", formId)
+      .where("removed", "=", 0)
+      .orderBy("sort")
+      .execute();
   }
 
-  public loadForUnrestrictedForm(formId: string) {
-    return TypedDB.query("SELECT * FROM questions WHERE formId=? AND removed=0 ORDER BY sort;", [formId]);
+  public async loadForUnrestrictedForm(formId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("formId", "=", formId)
+      .where("removed", "=", 0)
+      .orderBy("sort")
+      .execute();
   }
 
   public async moveQuestionUp(id: string) {
-    const question = (await TypedDB.queryOne("SELECT formId, sort FROM questions WHERE id=?", [id])) as {
-      formId: string;
-      sort: number;
-    };
-    await TypedDB.query("UPDATE questions SET sort=sort+1 WHERE formId=? AND sort=?;", [question.formId, +question.sort - 1]);
-    await TypedDB.query("UPDATE questions SET sort=sort-1 WHERE id=?;", [id]);
+    const question = await this.db.selectFrom(this.tableName)
+      .select(["formId", "sort"])
+      .where("id", "=", id)
+      .executeTakeFirst();
+    if (question) {
+      await sql`UPDATE questions SET sort=sort+1 WHERE formId=${question.formId} AND sort=${+question.sort - 1}`.execute(this.db);
+      await sql`UPDATE questions SET sort=sort-1 WHERE id=${id}`.execute(this.db);
+    }
   }
 
   public async moveQuestionDown(id: string) {
-    const question = (await TypedDB.queryOne("SELECT formId, sort FROM questions WHERE id=?", [id])) as {
-      formId: string;
-      sort: number;
-    };
-    await TypedDB.query("UPDATE questions SET sort=sort-1 WHERE formId=? AND sort=?;", [question.formId, +question.sort + 1]);
-    await TypedDB.query("UPDATE questions SET sort=sort+1 WHERE id=?;", [id]);
+    const question = await this.db.selectFrom(this.tableName)
+      .select(["formId", "sort"])
+      .where("id", "=", id)
+      .executeTakeFirst();
+    if (question) {
+      await sql`UPDATE questions SET sort=sort-1 WHERE formId=${question.formId} AND sort=${+question.sort + 1}`.execute(this.db);
+      await sql`UPDATE questions SET sort=sort+1 WHERE id=${id}`.execute(this.db);
+    }
   }
 
-  protected rowToModel(row: any): Question {
+  public convertToModel(_churchId: string, data: any): Question {
     const result: Question = {
-      id: row.id,
-      churchId: row.churchId,
-      formId: row.formId,
-      parentId: row.parentId,
-      title: row.title,
-      description: row.description,
-      fieldType: row.fieldType,
-      placeholder: row.placeholder,
-      required: row.required,
-      sort: row.sort,
-      choices: row.choices || []
+      id: data.id,
+      churchId: data.churchId,
+      formId: data.formId,
+      parentId: data.parentId,
+      title: data.title,
+      description: data.description,
+      fieldType: data.fieldType,
+      placeholder: data.placeholder,
+      required: data.required,
+      sort: data.sort,
+      choices: data.choices || []
     };
-    if (typeof row.choices === "string") result.choices = JSON.parse(row.choices);
-    else result.choices = row.choices;
+    if (typeof data.choices === "string") result.choices = JSON.parse(data.choices);
+    else result.choices = data.choices;
     return result;
   }
 }

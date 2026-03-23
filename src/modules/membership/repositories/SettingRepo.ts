@@ -1,41 +1,36 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Setting } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class SettingRepo extends ConfiguredRepo<Setting> {
-  protected get repoConfig(): RepoConfig<Setting> {
+export class SettingRepo extends KyselyRepo {
+  protected readonly tableName = "settings";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async loadPublicSettings(churchId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("public", "=", 1)
+      .execute();
+  }
+
+  public async loadMulipleChurches(keyNames: string[], churchIds: string[]) {
+    if (!keyNames.length || !churchIds.length) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("keyName", "in", keyNames)
+      .where("churchId", "in", churchIds)
+      .where("public", "=", 1)
+      .execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "settings",
-      hasSoftDelete: false,
-      columns: ["keyName", "value", "public"]
-    };
-  }
-
-  public loadPublicSettings(churchId: string) {
-    return TypedDB.query("SELECT * FROM settings WHERE churchId=? AND public=?", [churchId, 1]);
-  }
-
-  public loadMulipleChurches(keyNames: string[], churchIds: string[]) {
-    if (!keyNames.length || !churchIds.length) return Promise.resolve([]);
-
-    const keyNamePlaceholders = keyNames.map(() => "?").join(",");
-    const churchIdPlaceholders = churchIds.map(() => "?").join(",");
-
-    const sql = `SELECT * FROM settings WHERE keyName IN (${keyNamePlaceholders}) AND churchId IN (${churchIdPlaceholders}) AND public=1`;
-    const params = [...keyNames, ...churchIds];
-
-    return TypedDB.query(sql, params);
-  }
-
-  protected rowToModel(row: any): Setting {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      keyName: row.keyName,
-      value: row.value,
-      public: row.public
+      id: data.id,
+      churchId: data.churchId,
+      keyName: data.keyName,
+      value: data.value,
+      public: data.public
     };
   }
 }

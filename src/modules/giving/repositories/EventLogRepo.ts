@@ -1,61 +1,52 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { EventLog } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { UniqueIdHelper } from "@churchapps/apihelper";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class EventLogRepo extends ConfiguredRepo<EventLog> {
-  protected get repoConfig(): RepoConfig<EventLog> {
-    return {
-      tableName: "eventLogs",
-      hasSoftDelete: false,
-      idColumn: "id", // Now char(11) generated ID
-      insertColumns: ["customerId", "provider", "providerId", "eventType", "message", "status", "created"],
-      updateColumns: ["resolved"],
-      insertLiterals: { resolved: "FALSE" }
-    };
-  }
+export class EventLogRepo extends KyselyRepo {
+  protected readonly tableName = "eventLogs";
+  protected readonly moduleName = "giving";
+  protected readonly softDelete = false;
 
-  // Override create to handle generated ID and providerId field
-  protected async create(model: EventLog): Promise<EventLog> {
-    if (!model.id) model.id = this.createId();
-    const sql = "INSERT INTO eventLogs (id, churchId, customerId, provider, providerId, eventType, message, status, created, resolved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
-    const params = [
-      model.id, model.churchId, model.customerId, model.provider, model.providerId, model.eventType, model.message, model.status, model.created, false
-    ];
-    await TypedDB.query(sql, params);
+  public override async save(model: any) {
+    if (model.providerId) {
+      const existingEvent = await this.loadByProviderId(model.churchId, model.providerId);
+      if (existingEvent) {
+        const updated = { ...model, id: (existingEvent as any).id };
+        const { id: _id, churchId: _cid, ...setData } = updated;
+        await this.db.updateTable("eventLogs").set(setData)
+          .where("id", "=", updated.id).where("churchId", "=", updated.churchId).execute();
+        return updated;
+      }
+    }
+    // Create
+    if (!model.id) model.id = UniqueIdHelper.shortId();
+    await this.db.insertInto("eventLogs").values({
+      id: model.id, churchId: model.churchId, customerId: model.customerId,
+      provider: model.provider, providerId: model.providerId, eventType: model.eventType,
+      message: model.message, status: model.status, created: model.created, resolved: false
+    }).execute();
     return model;
   }
 
-  // Override save to check if event already exists by providerId (idempotency)
-  public async save(eventLog: EventLog) {
-    if (eventLog.providerId) {
-      const existingEvent = await this.loadByProviderId(eventLog.churchId as string, eventLog.providerId);
-      if (existingEvent) {
-        return this.update({ ...eventLog, id: existingEvent.id });
-      }
-    }
-    return this.create(eventLog);
-  }
-
-  // Load event by provider ID (for idempotency checks)
-  public async loadByProviderId(churchId: string, providerId: string): Promise<EventLog | null> {
-    const rows = await TypedDB.query(
-      "SELECT * FROM eventLogs WHERE churchId=? AND providerId=? LIMIT 1;",
-      [churchId, providerId]
-    );
-    return rows.length > 0 ? this.rowToModel(rows[0]) : null;
+  public async loadByProviderId(churchId: string, providerId: string) {
+    return await this.db.selectFrom("eventLogs").selectAll()
+      .where("churchId", "=", churchId).where("providerId", "=", providerId)
+      .limit(1).executeTakeFirst() ?? null;
   }
 
   public async loadByType(churchId: string, status: string) {
-    return TypedDB.query(
-      "SELECT eventLogs.*, personId FROM customers LEFT JOIN eventLogs ON customers.id = eventLogs.customerId WHERE eventLogs.status=? AND eventLogs.churchId=? ORDER BY eventLogs.created DESC;",
-      [status, churchId]
-    );
+    const result = await sql`
+      SELECT eventLogs.*, personId FROM customers
+      LEFT JOIN eventLogs ON customers.id = eventLogs.customerId
+      WHERE eventLogs.status=${status} AND eventLogs.churchId=${churchId}
+      ORDER BY eventLogs.created DESC
+    `.execute(this.db);
+    return result.rows;
   }
 
-  protected rowToModel(row: any): EventLog {
-    return { ...row };
+  public convertToModel(_churchId: string, data: any) {
+    return { ...data };
   }
 }

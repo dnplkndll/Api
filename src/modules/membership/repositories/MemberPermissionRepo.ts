@@ -1,64 +1,75 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
+import { sql } from "kysely";
 import { MemberPermission } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class MemberPermissionRepo extends ConfiguredRepo<MemberPermission> {
-  protected get repoConfig(): RepoConfig<MemberPermission> {
+export class MemberPermissionRepo extends KyselyRepo {
+  protected readonly tableName = "memberPermissions";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async deleteByMemberId(churchId: string, memberId: string, contentId: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("memberId", "=", memberId)
+      .where("contentId", "=", contentId)
+      .where("churchId", "=", churchId)
+      .execute();
+  }
+
+  public async loadMyByForm(churchId: string, formId: string, personId: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("contentType", "=", "form")
+      .where("contentId", "=", formId)
+      .where("memberId", "=", personId)
+      .executeTakeFirst() ?? null;
+  }
+
+  public async loadByEmailNotification(churchId: string, contentType: string, contentId: string, emailNotification: boolean) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("contentType", "=", contentType)
+      .where("contentId", "=", contentId)
+      .where("emailNotification", "=", emailNotification)
+      .execute();
+  }
+
+  public async loadFormsByPerson(churchId: string, personId: string) {
+    const result = await sql`SELECT mp.*, p.displayName as personName
+      FROM memberPermissions mp
+      INNER JOIN people p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)
+      WHERE mp.churchId=${churchId} AND mp.memberId=${personId}
+      ORDER BY mp.action, mp.emailNotification desc`.execute(this.db);
+    return result.rows;
+  }
+
+  public async loadPeopleByForm(churchId: string, formId: string) {
+    const result = await sql`SELECT mp.*, p.displayName as personName
+      FROM memberPermissions mp
+      INNER JOIN people p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)
+      WHERE mp.churchId=${churchId} AND mp.contentId=${formId}
+      ORDER BY mp.action, mp.emailNotification desc`.execute(this.db);
+    return result.rows;
+  }
+
+  public convertToModel(_churchId: string, data: any): MemberPermission {
     return {
-      tableName: "memberPermissions",
-      hasSoftDelete: false,
-      columns: ["memberId", "contentType", "contentId", "action", "emailNotification"]
+      id: data.id,
+      churchId: data.churchId,
+      memberId: data.memberId,
+      contentType: data.contentType,
+      contentId: data.contentId,
+      action: data.action,
+      personName: data.personName,
+      emailNotification: data.emailNotification
     };
   }
 
-  public deleteByMemberId(churchId: string, memberId: string, contentId: string) {
-    return TypedDB.query("DELETE FROM memberPermissions WHERE memberId=? AND contentId=? AND churchId=?;", [memberId, churchId, contentId]);
-  }
-
-  public loadMyByForm(churchId: string, formId: string, personId: string) {
-    return TypedDB.queryOne("SELECT * FROM memberPermissions WHERE churchId=? and contentType='form' and contentId=? and memberId=?;", [churchId, formId, personId]);
-  }
-
-  public loadByEmailNotification(churchId: string, contentType: string, contentId: string, emailNotification: boolean) {
-    return TypedDB.query("SELECT * FROM memberPermissions WHERE churchId=? AND contentType=? AND contentId=? AND emailNotification=?;", [churchId, contentType, contentId, emailNotification]);
-  }
-
-  public loadFormsByPerson(churchId: string, personId: string) {
-    const sql =
-      "SELECT mp.*, p.displayName as personName" +
-      " FROM memberPermissions mp" +
-      " INNER JOIN `people` p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)" +
-      " WHERE mp.churchId=? AND mp.memberId=?" +
-      " ORDER BY mp.action, mp.emailNotification desc;";
-    return TypedDB.query(sql, [churchId, personId]);
-  }
-
-  public loadPeopleByForm(churchId: string, formId: string) {
-    const sql =
-      "SELECT mp.*, p.displayName as personName" +
-      " FROM memberPermissions mp" +
-      " INNER JOIN `people` p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)" +
-      " WHERE mp.churchId=? AND mp.contentId=?" +
-      " ORDER BY mp.action, mp.emailNotification desc;";
-    return TypedDB.query(sql, [churchId, formId]);
-  }
-
-  protected rowToModel(row: any): MemberPermission {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      memberId: row.memberId,
-      contentType: row.contentType,
-      contentId: row.contentId,
-      action: row.action,
-      personName: row.personName,
-      emailNotification: row.emailNotification
-    };
-  }
-
-  private existingPermissionRecord(churchId: string, contentId: string) {
-    return TypedDB.queryOne("SELECT * FROM memberPermissions WHERE contentId=? AND churchId=?;", [contentId, churchId]);
+  private async existingPermissionRecord(churchId: string, contentId: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("contentId", "=", contentId)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst() ?? null;
   }
 }

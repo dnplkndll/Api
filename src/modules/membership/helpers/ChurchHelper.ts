@@ -7,7 +7,7 @@ export class ChurchHelper {
   static async selectSubDomain(name: string) {
     const subDomain = this.suggestSubDomain(name) || "church";
     const repos = await RepoManager.getRepos<Repos>("membership");
-    const churches: Church[] = await repos.church.loadContainingSubDomain(subDomain);
+    const churches = await repos.church.loadContainingSubDomain(subDomain) as any as Church[];
     let result = subDomain;
     let i = 1;
     while (ArrayHelper.getOne(churches, "subDomain", result)) {
