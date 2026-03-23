@@ -11,3 +11,5 @@ export { DB, MultiDatabasePool } from "./DB.js";
 export { BaseRepo } from "./BaseRepo.js";
 export { ConfiguredRepo, type RepoConfig } from "./ConfiguredRepo.js";
 export { TypedDB } from "./TypedDB.js";
+export { KyselyRepo, GlobalKyselyRepo } from "./KyselyRepo.js";
+export { GlobalConfiguredRepo, type GlobalRepoConfig } from "./GlobalConfiguredRepo.js";
