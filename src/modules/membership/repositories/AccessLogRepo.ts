@@ -23,7 +23,6 @@ export class AccessLogRepo extends KyselyRepo {
 
   // For compatibility with existing controllers
   public async create(log: any) {
-    log.id = this.createId();
     return this.save(log);
   }
 }

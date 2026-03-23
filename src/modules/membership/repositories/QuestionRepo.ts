@@ -34,7 +34,7 @@ export class QuestionRepo extends KyselyRepo {
       .executeTakeFirst();
     if (question) {
       await sql`UPDATE questions SET sort=sort-1 WHERE formId=${question.formId} AND sort>${+question.sort}`.execute(this.db);
-      await sql`UPDATE questions SET sort=CONCAT('d', sort), removed=1 WHERE id=${id} AND churchId=${churchId}`.execute(this.db);
+      await sql`UPDATE questions SET sort=-1*sort, removed=1 WHERE id=${id} AND churchId=${churchId}`.execute(this.db);
     }
   }
 

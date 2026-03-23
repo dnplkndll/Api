@@ -90,6 +90,7 @@ export class GroupRepo extends KyselyRepo {
   public convertFromModel(group: Group) {
     group.labels = null;
     if (group.labelArray?.length > 0) group.labels = group.labelArray.join(",");
+    delete (group as any).labelArray;
   }
 
   public convertToModel(_churchId: string, data: any) {

@@ -32,7 +32,6 @@ export class AuditLogRepo extends KyselyRepo {
   }
 
   public async create(log: any) {
-    log.id = this.createId();
     return this.save(log);
   }
 
