@@ -91,4 +91,9 @@ export class ConnectionRepo extends KyselyRepo {
       .where("id", "<>", id)
       .execute();
   }
+
+  public convertToModel(_churchId: string, data: any) {
+    if (!data) return null;
+    return { id: data.id, churchId: data.churchId, conversationId: data.conversationId, personId: data.personId, displayName: data.displayName, timeJoined: data.timeJoined, socketId: data.socketId, ipAddress: data.ipAddress };
+  }
 }

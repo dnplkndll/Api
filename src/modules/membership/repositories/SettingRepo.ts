@@ -1,5 +1,4 @@
 import { injectable } from "inversify";
-import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()

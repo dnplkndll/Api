@@ -80,4 +80,9 @@ export class ConversationRepo extends KyselyRepo {
   public async updateStats(conversationId: string) {
     await sql`CALL updateConversationStats(${conversationId})`.execute(this.db);
   }
+
+  public convertToModel(_churchId: string, data: any) {
+    if (!data) return null;
+    return { id: data.id, churchId: data.churchId, contentType: data.contentType, contentId: data.contentId, title: data.title, dateCreated: data.dateCreated };
+  }
 }

@@ -66,4 +66,9 @@ export class MessageRepo extends KyselyRepo {
       .execute();
     return result || [];
   }
+
+  public convertToModel(_churchId: string, data: any) {
+    if (!data) return null;
+    return { id: data.id, churchId: data.churchId, conversationId: data.conversationId, displayName: data.displayName, timeSent: data.timeSent, messageType: data.messageType, content: data.content, personId: data.personId, timeUpdated: data.timeUpdated };
+  }
 }

@@ -1,5 +1,4 @@
 import { injectable } from "inversify";
-import { sql } from "kysely";
 import { DateHelper } from "../helpers/index.js";
 import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 

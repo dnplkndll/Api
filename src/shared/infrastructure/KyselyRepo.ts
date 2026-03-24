@@ -58,7 +58,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
       await this.db.updateTable(this.tableName).set(setData)
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
-      model.id = UniqueIdHelper.shortId();
+      model.id = this.createId();
       const values = this.softDelete ? { ...model, removed: 0 } : model;
       await this.db.insertInto(this.tableName).values(values).execute();
     }
@@ -101,7 +101,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
 
   /** Force-insert a model, bypassing save()'s update-if-id-exists logic. */
   public async insert(model: any) {
-    if (!model.id) model.id = UniqueIdHelper.shortId();
+    if (!model.id) model.id = this.createId();
     const values = this.softDelete ? { ...model, removed: 0 } : model;
     await this.db.insertInto(this.tableName).values(values).execute();
     return model;
@@ -120,7 +120,7 @@ export abstract class GlobalKyselyRepo extends BaseKyselyRepo {
       await this.db.updateTable(this.tableName).set(setData)
         .where("id", "=", model.id).execute();
     } else {
-      model.id = UniqueIdHelper.shortId();
+      model.id = this.createId();
       await this.db.insertInto(this.tableName).values(model).execute();
     }
     return model;
