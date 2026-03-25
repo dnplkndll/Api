@@ -21,7 +21,7 @@ export class OAuthDeviceCodeRepo extends GlobalKyselyRepo {
       } as any).where("id", "=", model.id).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO oAuthDeviceCodes (id, deviceCode, userCode, clientId, scopes, expiresAt, pollInterval, status, createdAt)
+      await sql`INSERT INTO "oAuthDeviceCodes" (id, "deviceCode", "userCode", "clientId", scopes, "expiresAt", "pollInterval", status, "createdAt")
                  VALUES (${model.id}, ${model.deviceCode}, ${model.userCode}, ${model.clientId}, ${model.scopes}, ${expiresAt}, ${model.pollInterval || 5}, ${model.status || "pending"}, NOW())`.execute(this.db);
     }
     return model;
@@ -40,7 +40,7 @@ export class OAuthDeviceCodeRepo extends GlobalKyselyRepo {
   public async loadByUserCode(userCode: string) {
     // Normalize: remove hyphens and uppercase
     const normalizedCode = userCode.replace(/-/g, "").toUpperCase();
-    const result = await sql`SELECT * FROM oAuthDeviceCodes WHERE REPLACE(userCode, '-', '')=${normalizedCode} AND status='pending'`.execute(this.db);
+    const result = await sql`SELECT * FROM "oAuthDeviceCodes" WHERE REPLACE("userCode", '-', '')=${normalizedCode} AND status='pending'`.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
 
@@ -50,7 +50,7 @@ export class OAuthDeviceCodeRepo extends GlobalKyselyRepo {
   }
 
   public async deleteExpired() {
-    await sql`DELETE FROM oAuthDeviceCodes WHERE expiresAt < NOW() AND status IN ('pending', 'expired')`.execute(this.db);
+    await sql`DELETE FROM "oAuthDeviceCodes" WHERE "expiresAt" < NOW() AND status IN ('pending', 'expired')`.execute(this.db);
   }
 
   // Generate cryptographically secure device code (32 bytes, hex encoded)

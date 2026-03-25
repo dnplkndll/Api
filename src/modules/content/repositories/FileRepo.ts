@@ -48,7 +48,7 @@ export class FileRepo extends KyselyRepo {
   }
 
   public async loadTotalBytes(churchId: string, contentType: string, contentId: string) {
-    const result = await sql`select IFNULL(sum(size), 0) as size from files where churchId=${churchId} and contentType=${contentType} and contentId=${contentId}`.execute(this.db);
+    const result = await sql`select COALESCE(sum(size), 0) as size from files where "churchId"=${churchId} and "contentType"=${contentType} and "contentId"=${contentId}`.execute(this.db);
     return result.rows[0] as { size: number };
   }
 }

@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { sql } from "kysely";
 import { DateHelper } from "../../../shared/helpers/DateHelper.js";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class SessionRepo extends KyselyRepo {
@@ -43,16 +44,20 @@ export class SessionRepo extends KyselyRepo {
   }
 
   public async loadByGroupIdWithNames(churchId: string, groupId: string) {
+    const isPg = getDialect() === "postgres";
+    const dateFmt = isPg
+      ? sql`TO_CHAR(s."sessionDate", 'MM/DD/YYYY')`
+      : sql`DATE_FORMAT(s."sessionDate", '%m/%d/%Y')`;
     const result = await sql`
       select s.id,
         CASE
-          WHEN st.name IS NULL THEN DATE_FORMAT(sessionDate, '%m/%d/%Y')
-          ELSE concat(DATE_FORMAT(sessionDate, '%m/%d/%Y'), ' - ', st.name)
-        END AS displayName
+          WHEN st.name IS NULL THEN ${dateFmt}
+          ELSE concat(${dateFmt}, ' - ', st.name)
+        END AS "displayName"
       FROM sessions s
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      WHERE s.churchId=${churchId} AND s.groupId=${groupId}
-      ORDER by s.sessionDate desc
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      WHERE s."churchId"=${churchId} AND s."groupId"=${groupId}
+      ORDER by s."sessionDate" desc
     `.execute(this.db);
     return this.convertAllToModel(churchId, result.rows as any[]);
   }

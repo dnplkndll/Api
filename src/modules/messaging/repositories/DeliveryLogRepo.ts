@@ -17,7 +17,7 @@ export class DeliveryLogRepo extends KyselyRepo {
       }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO deliveryLogs (id, churchId, personId, contentType, contentId, deliveryMethod, success, errorMessage, deliveryAddress, attemptTime) VALUES (${model.id}, ${model.churchId}, ${model.personId}, ${model.contentType}, ${model.contentId}, ${model.deliveryMethod}, ${model.success}, ${model.errorMessage}, ${model.deliveryAddress}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "deliveryLogs" (id, "churchId", "personId", "contentType", "contentId", "deliveryMethod", success, "errorMessage", "deliveryAddress", "attemptTime") VALUES (${model.id}, ${model.churchId}, ${model.personId}, ${model.contentType}, ${model.contentId}, ${model.deliveryMethod}, ${model.success}, ${model.errorMessage}, ${model.deliveryAddress}, NOW())`.execute(this.db);
     }
     return model;
   }

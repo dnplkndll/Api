@@ -15,7 +15,7 @@ export class AccessLogRepo extends KyselyRepo {
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = this.createId();
-      const result = await sql`INSERT INTO accessLogs (id, churchId, userId, appName, loginTime) VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.appName}, NOW())`.execute(this.db);
+      const result = await sql`INSERT INTO "accessLogs" (id, "churchId", "userId", "appName", "loginTime") VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.appName}, NOW())`.execute(this.db);
       return model;
     }
     return model;

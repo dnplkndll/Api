@@ -21,7 +21,7 @@ export class OAuthCodeRepo extends GlobalKyselyRepo {
       } as any).where("id", "=", model.id).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO oAuthCodes (id, code, clientId, userChurchId, redirectUri, scopes, expiresAt, createdAt) VALUES (${model.id}, ${model.code}, ${model.clientId}, ${model.userChurchId}, ${model.redirectUri}, ${model.scopes}, ${expiresAt}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "oAuthCodes" (id, code, "clientId", "userChurchId", "redirectUri", scopes, "expiresAt", "createdAt") VALUES (${model.id}, ${model.code}, ${model.clientId}, ${model.userChurchId}, ${model.redirectUri}, ${model.scopes}, ${expiresAt}, NOW())`.execute(this.db);
     }
     return model;
   }
@@ -47,6 +47,6 @@ export class OAuthCodeRepo extends GlobalKyselyRepo {
   }
 
   public async deleteExpired() {
-    await sql`DELETE FROM oAuthCodes WHERE expiresAt < NOW()`.execute(this.db);
+    await sql`DELETE FROM "oAuthCodes" WHERE "expiresAt" < NOW()`.execute(this.db);
   }
 }

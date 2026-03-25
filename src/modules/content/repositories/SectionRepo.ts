@@ -56,7 +56,7 @@ export class SectionRepo extends KyselyRepo {
   }
 
   public async loadForPage(churchId: string, pageId: string) {
-    const result = await sql`SELECT * FROM sections WHERE churchId=${churchId} AND (pageId=${pageId} or (pageId IS NULL and blockId IS NULL)) order by sort`.execute(this.db);
+    const result = await sql`SELECT * FROM sections WHERE "churchId"=${churchId} AND ("pageId"=${pageId} or ("pageId" IS NULL and "blockId" IS NULL)) order by sort`.execute(this.db);
     return result.rows as any[];
   }
 

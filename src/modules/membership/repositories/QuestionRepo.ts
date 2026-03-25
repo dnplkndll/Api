@@ -21,7 +21,7 @@ export class QuestionRepo extends KyselyRepo {
       await this.db.insertInto(this.tableName).values({
         ...model,
         choices,
-        removed: 0
+        removed: false
       }).execute();
     }
     return model;
@@ -33,8 +33,8 @@ export class QuestionRepo extends KyselyRepo {
       .where("id", "=", id)
       .executeTakeFirst();
     if (question) {
-      await sql`UPDATE questions SET sort=sort-1 WHERE formId=${question.formId} AND sort>${+question.sort}`.execute(this.db);
-      await sql`UPDATE questions SET sort=-1*sort, removed=1 WHERE id=${id} AND churchId=${churchId}`.execute(this.db);
+      await sql`UPDATE questions SET sort=sort-1 WHERE "formId"=${question.formId} AND sort>${+question.sort}`.execute(this.db);
+      await sql`UPDATE questions SET sort=-1*sort, removed=true WHERE id=${id} AND "churchId"=${churchId}`.execute(this.db);
     }
   }
 
@@ -42,7 +42,7 @@ export class QuestionRepo extends KyselyRepo {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
       .where("formId", "=", formId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .orderBy("sort")
       .execute();
   }
@@ -50,7 +50,7 @@ export class QuestionRepo extends KyselyRepo {
   public async loadForUnrestrictedForm(formId: string) {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("formId", "=", formId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .orderBy("sort")
       .execute();
   }
@@ -61,7 +61,7 @@ export class QuestionRepo extends KyselyRepo {
       .where("id", "=", id)
       .executeTakeFirst();
     if (question) {
-      await sql`UPDATE questions SET sort=sort+1 WHERE formId=${question.formId} AND sort=${+question.sort - 1}`.execute(this.db);
+      await sql`UPDATE questions SET sort=sort+1 WHERE "formId"=${question.formId} AND sort=${+question.sort - 1}`.execute(this.db);
       await sql`UPDATE questions SET sort=sort-1 WHERE id=${id}`.execute(this.db);
     }
   }
@@ -72,7 +72,7 @@ export class QuestionRepo extends KyselyRepo {
       .where("id", "=", id)
       .executeTakeFirst();
     if (question) {
-      await sql`UPDATE questions SET sort=sort-1 WHERE formId=${question.formId} AND sort=${+question.sort + 1}`.execute(this.db);
+      await sql`UPDATE questions SET sort=sort-1 WHERE "formId"=${question.formId} AND sort=${+question.sort + 1}`.execute(this.db);
       await sql`UPDATE questions SET sort=sort+1 WHERE id=${id}`.execute(this.db);
     }
   }

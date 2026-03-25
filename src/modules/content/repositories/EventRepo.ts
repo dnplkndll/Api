@@ -34,7 +34,7 @@ export class EventRepo extends KyselyRepo {
   }
 
   public async loadTimelineGroup(churchId: string, groupId: string, eventIds: string[]) {
-    let q = sql`select *, 'event' as postType, id as postId from events where churchId=${churchId} AND ((groupId = ${groupId} and (end>curdate() or recurrenceRule IS NOT NULL))`;
+    let q = sql`select *, 'event' as "postType", id as "postId" from events where "churchId"=${churchId} AND (("groupId" = ${groupId} and (end>curdate() or "recurrenceRule" IS NOT NULL))`;
     if (eventIds.length > 0) {
       q = sql`${q} OR id IN (${sql.join(eventIds)})`;
     }
@@ -44,7 +44,7 @@ export class EventRepo extends KyselyRepo {
   }
 
   public async loadTimeline(churchId: string, groupIds: string[], eventIds: string[]) {
-    let q = sql`select *, 'event' as postType, id as postId from events where churchId=${churchId} AND (((groupId IN (${sql.join(groupIds)}) OR groupId IN (SELECT groupId FROM curatedEvents WHERE churchId=${churchId} AND eventId IS NULL) OR id IN (SELECT eventId from curatedEvents WHERE churchId=${churchId})) and (end>curdate() or recurrenceRule IS NOT NULL))`;
+    let q = sql`select *, 'event' as "postType", id as "postId" from events where "churchId"=${churchId} AND ((("groupId" IN (${sql.join(groupIds)}) OR "groupId" IN (SELECT "groupId" FROM "curatedEvents" WHERE "churchId"=${churchId} AND "eventId" IS NULL) OR id IN (SELECT "eventId" from "curatedEvents" WHERE "churchId"=${churchId})) and (end>curdate() or "recurrenceRule" IS NOT NULL))`;
     if (eventIds.length > 0) {
       q = sql`${q} OR id IN (${sql.join(eventIds)})`;
     }

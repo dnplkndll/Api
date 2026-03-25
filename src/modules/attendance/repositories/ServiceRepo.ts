@@ -10,25 +10,30 @@ export class ServiceRepo extends KyselyRepo {
 
   public override async loadAll(churchId: string) {
     return this.db.selectFrom("services").selectAll()
-      .where("churchId", "=", churchId).where("removed", "=", 0)
+      .where("churchId", "=", churchId).where("removed", "=", false as any)
       .orderBy("name").execute();
   }
 
   public async loadWithCampus(churchId: string) {
     const result = await sql`
-      SELECT s.*, c.name as campusName FROM services s
-      INNER JOIN campuses c on c.id=s.campusId
-      WHERE s.churchId=${churchId} AND s.removed=0 and c.removed=0
+      SELECT s.*, c.name as "campusName" FROM services s
+      INNER JOIN campuses c on c.id=s."campusId"
+      WHERE s."churchId"=${churchId} AND s.removed=false and c.removed=false
       ORDER BY c.name, s.name
     `.execute(this.db);
     return this.convertAllToModel(churchId, result.rows as any[]);
   }
 
   public async searchByCampus(churchId: string, campusId: string) {
-    const result = await sql`
-      SELECT * FROM services WHERE churchId=${churchId} AND (${campusId}=0 OR CampusId=${campusId}) AND removed=0 ORDER by name
-    `.execute(this.db);
-    return this.convertAllToModel(churchId, result.rows as any[]);
+    let q = this.db.selectFrom("services").selectAll()
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .orderBy("name");
+    if (campusId && campusId !== "0") {
+      q = q.where("campusId", "=", campusId);
+    }
+    const rows = await q.execute();
+    return this.convertAllToModel(churchId, rows as any[]);
   }
 
   public convertToModel(_churchId: string, data: any) {

@@ -24,9 +24,9 @@ export class SubscriptionFundsRepo extends KyselyRepo {
 
   public async loadBySubscriptionId(churchId: string, subscriptionId: string) {
     const result = await sql`
-      SELECT subscriptionFunds.*, funds.name FROM subscriptionFunds
-      LEFT JOIN funds ON subscriptionFunds.fundId = funds.id
-      WHERE subscriptionFunds.churchId=${churchId} AND subscriptionFunds.subscriptionId=${subscriptionId}
+      SELECT "subscriptionFunds".*, funds.name FROM "subscriptionFunds"
+      LEFT JOIN funds ON "subscriptionFunds"."fundId" = funds.id
+      WHERE "subscriptionFunds"."churchId"=${churchId} AND "subscriptionFunds"."subscriptionId"=${subscriptionId}
     `.execute(this.db);
     return result.rows;
   }
@@ -35,9 +35,9 @@ export class SubscriptionFundsRepo extends KyselyRepo {
   public async loadForSubscriptionLog(churchId: string, subscriptionId: string) {
     let result;
     const queryResult = await sql`
-      SELECT subscriptionFunds.*, funds.name, funds.removed FROM subscriptionFunds
-      LEFT JOIN funds ON subscriptionFunds.fundId = funds.id
-      WHERE subscriptionFunds.churchId=${churchId} AND subscriptionFunds.subscriptionId=${subscriptionId}
+      SELECT "subscriptionFunds".*, funds.name, funds.removed FROM "subscriptionFunds"
+      LEFT JOIN funds ON "subscriptionFunds"."fundId" = funds.id
+      WHERE "subscriptionFunds"."churchId"=${churchId} AND "subscriptionFunds"."subscriptionId"=${subscriptionId}
     `.execute(this.db);
     const subscriptionFund = queryResult.rows as any[];
     if (subscriptionFund && subscriptionFund[0] && subscriptionFund[0].removed === false) {

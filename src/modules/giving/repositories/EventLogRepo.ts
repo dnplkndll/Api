@@ -38,10 +38,10 @@ export class EventLogRepo extends KyselyRepo {
 
   public async loadByType(churchId: string, status: string) {
     const result = await sql`
-      SELECT eventLogs.*, personId FROM customers
-      LEFT JOIN eventLogs ON customers.id = eventLogs.customerId
-      WHERE eventLogs.status=${status} AND eventLogs.churchId=${churchId}
-      ORDER BY eventLogs.created DESC
+      SELECT "eventLogs".*, "personId" FROM customers
+      LEFT JOIN "eventLogs" ON customers.id = "eventLogs"."customerId"
+      WHERE "eventLogs".status=${status} AND "eventLogs"."churchId"=${churchId}
+      ORDER BY "eventLogs".created DESC
     `.execute(this.db);
     return result.rows;
   }

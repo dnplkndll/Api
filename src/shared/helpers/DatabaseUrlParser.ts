@@ -23,8 +23,8 @@ export class DatabaseUrlParser {
       throw new Error("Database URL is required");
     }
 
-    // Remove mysql:// prefix if present
-    const cleanUrl = url.replace(/^mysql:\/\//, "");
+    // Remove protocol prefix (mysql://, postgresql://, postgres://)
+    const cleanUrl = url.replace(/^(mysql|postgresql|postgres):\/\//, "");
 
     // Parse the URL components
     // Pattern: [user[:password]@]host[:port]/database[?params]
@@ -41,7 +41,9 @@ export class DatabaseUrlParser {
       throw new Error(`Missing required components in connection string: ${url}. Host and database are required.`);
     }
 
-    const port = portStr ? parseInt(portStr, 10) : 3306;
+    const isPostgres = url.startsWith("postgres");
+    const defaultPort = isPostgres ? 5432 : 3306;
+    const port = portStr ? parseInt(portStr, 10) : defaultPort;
 
     if (isNaN(port) || port <= 0 || port > 65535) {
       throw new Error(`Invalid port number in connection string: ${portStr}. Port must be between 1 and 65535.`);

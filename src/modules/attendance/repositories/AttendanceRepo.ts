@@ -3,6 +3,7 @@ import { sql } from "kysely";
 import { DateHelper } from "@churchapps/apihelper";
 import { AttendanceRecord } from "../models/index.js";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class AttendanceRepo extends KyselyRepo {
@@ -25,47 +26,68 @@ export class AttendanceRepo extends KyselyRepo {
 
   public async loadTree(churchId: string) {
     const result = await sql`
-      SELECT c.id as campusId, IFNULL(c.name, 'Unassigned') as campusName, s.id as serviceId, s.name as serviceName, st.id as serviceTimeId, st.name as serviceTimeName
+      SELECT c.id as "campusId", COALESCE(c.name, 'Unassigned') as "campusName", s.id as "serviceId", s.name as "serviceName", st.id as "serviceTimeId", st.name as "serviceTimeName"
       FROM campuses c
-      LEFT JOIN services s on s.campusId = c.id AND IFNULL(s.removed, 0) = 0
-      LEFT JOIN serviceTimes st on st.serviceId = s.id AND IFNULL(st.removed, 0) = 0
-      WHERE (c.id is NULL or c.churchId = ${churchId}) AND IFNULL(c.removed, 0) = 0
-      ORDER by campusName, serviceName, serviceTimeName
+      LEFT JOIN services s on s."campusId" = c.id AND COALESCE(s.removed, false) = false
+      LEFT JOIN "serviceTimes" st on st."serviceId" = s.id AND COALESCE(st.removed, false) = false
+      WHERE (c.id is NULL or c."churchId" = ${churchId}) AND COALESCE(c.removed, false) = false
+      ORDER by "campusName", "serviceName", "serviceTimeName"
     `.execute(this.db);
     return result.rows;
   }
 
   public async loadTrend(churchId: string, campusId: string, serviceId: string, serviceTimeId: string, groupId: string) {
-    const result = await sql`
-      SELECT STR_TO_DATE(concat(year(v.visitDate), ' ', week(v.visitDate, 0), ' Sunday'), '%X %V %W') AS week, count(distinct(v.id)) as visits
-      FROM visits v
-      LEFT JOIN visitSessions vs on vs.visitId=v.id
-      LEFT JOIN sessions s on s.id = vs.sessionId
-      LEFT JOIN groupServiceTimes gst on gst.groupId = s.groupId
-      LEFT JOIN serviceTimes st on st.id = gst.serviceTimeId
-      LEFT JOIN services ser on ser.id = st.serviceId
-      WHERE v.churchId=${churchId}
-      AND ${groupId} IN ('0', s.groupId)
-      AND ${serviceTimeId} IN ('0', st.id)
-      AND ${serviceId} IN ('0', ser.id)
-      AND ${campusId} IN ('0', ser.campusId)
-      GROUP BY year(v.visitDate), week(v.visitDate, 0), STR_TO_DATE(concat(year(v.visitDate), ' ', week(v.visitDate, 0), ' Sunday'), '%X %V %W')
-      ORDER BY year(v.visitDate), week(v.visitDate, 0)
-    `.execute(this.db);
+    const isPg = getDialect() === "postgres";
+    const result = isPg
+      ? await sql`
+        SELECT DATE_TRUNC('week', v."visitDate") AS week, count(distinct v.id) as visits
+        FROM visits v
+        LEFT JOIN "visitSessions" vs on vs."visitId"=v.id
+        LEFT JOIN sessions s on s.id = vs."sessionId"
+        LEFT JOIN "groupServiceTimes" gst on gst."groupId" = s."groupId"
+        LEFT JOIN "serviceTimes" st on st.id = gst."serviceTimeId"
+        LEFT JOIN services ser on ser.id = st."serviceId"
+        WHERE v."churchId"=${churchId}
+        AND ${groupId} IN ('0', s."groupId")
+        AND ${serviceTimeId} IN ('0', st.id)
+        AND ${serviceId} IN ('0', ser.id)
+        AND ${campusId} IN ('0', ser."campusId")
+        GROUP BY DATE_TRUNC('week', v."visitDate")
+        ORDER BY DATE_TRUNC('week', v."visitDate")
+      `.execute(this.db)
+      : await sql`
+        SELECT STR_TO_DATE(concat(year(v."visitDate"), ' ', week(v."visitDate", 0), ' Sunday'), '%X %V %W') AS week, count(distinct(v.id)) as visits
+        FROM visits v
+        LEFT JOIN "visitSessions" vs on vs."visitId"=v.id
+        LEFT JOIN sessions s on s.id = vs."sessionId"
+        LEFT JOIN "groupServiceTimes" gst on gst."groupId" = s."groupId"
+        LEFT JOIN "serviceTimes" st on st.id = gst."serviceTimeId"
+        LEFT JOIN services ser on ser.id = st."serviceId"
+        WHERE v."churchId"=${churchId}
+        AND ${groupId} IN ('0', s."groupId")
+        AND ${serviceTimeId} IN ('0', st.id)
+        AND ${serviceId} IN ('0', ser.id)
+        AND ${campusId} IN ('0', ser."campusId")
+        GROUP BY year(v."visitDate"), week(v."visitDate", 0), STR_TO_DATE(concat(year(v."visitDate"), ' ', week(v."visitDate", 0), ' Sunday'), '%X %V %W')
+        ORDER BY year(v."visitDate"), week(v."visitDate", 0)
+      `.execute(this.db);
     return result.rows;
   }
 
   public async loadGroups(churchId: string, serviceId: string, week: Date) {
+    const dateEnd = getDialect() === "postgres"
+      ? sql`${week} + INTERVAL '7 days'`
+      : sql`DATE_ADD(${week}, INTERVAL 7 DAY)`;
     const result = await sql`
-      SELECT ser.name as serviceName, st.name as serviceTimeName, s.groupId, v.personId
+      SELECT ser.name as "serviceName", st.name as "serviceTimeName", s."groupId", v."personId"
       FROM visits v
-      INNER JOIN visitSessions vs on vs.churchId=v.churchId AND vs.visitId=v.id
-      INNER JOIN sessions s on s.id=vs.sessionId
-      INNER JOIN serviceTimes st on st.id=s.serviceTimeId
-      INNER JOIN services ser on ser.id=st.serviceId
-      WHERE v.churchId=${churchId}
+      INNER JOIN "visitSessions" vs on vs."churchId"=v."churchId" AND vs."visitId"=v.id
+      INNER JOIN sessions s on s.id=vs."sessionId"
+      INNER JOIN "serviceTimes" st on st.id=s."serviceTimeId"
+      INNER JOIN services ser on ser.id=st."serviceId"
+      WHERE v."churchId"=${churchId}
       AND ${serviceId} IN (0, ser.id)
-      AND s.sessionDate BETWEEN ${week} AND DATE_ADD(${week}, INTERVAL 7 DAY)
+      AND s."sessionDate" BETWEEN ${week} AND ${dateEnd}
       ORDER by ser.name, st.name
     `.execute(this.db);
     return result.rows;
@@ -73,15 +95,15 @@ export class AttendanceRepo extends KyselyRepo {
 
   public async loadForPerson(churchId: string, personId: string) {
     const result = await sql`
-      SELECT v.visitDate, c.id as campusId, c.name as campusName, ser.id as serviceId, ser.name as serviceName, st.id as serviceTimeId, st.name as serviceTimeName, s.groupId
+      SELECT v."visitDate", c.id as "campusId", c.name as "campusName", ser.id as "serviceId", ser.name as "serviceName", st.id as "serviceTimeId", st.name as "serviceTimeName", s."groupId"
       FROM visits v
-      INNER JOIN visitSessions vs on vs.visitId = v.id
-      INNER JOIN sessions s on s.id = vs.sessionId
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      LEFT OUTER JOIN services ser on ser.Id = st.serviceId
-      LEFT OUTER JOIN campuses c on c.id = ser.campusId
-      WHERE v.churchId=${churchId} AND v.PersonId = ${personId}
-      ORDER BY v.visitDate desc, c.name, ser.name, st.name
+      INNER JOIN "visitSessions" vs on vs."visitId" = v.id
+      INNER JOIN sessions s on s.id = vs."sessionId"
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      LEFT OUTER JOIN services ser on ser.id = st."serviceId"
+      LEFT OUTER JOIN campuses c on c.id = ser."campusId"
+      WHERE v."churchId"=${churchId} AND v."personId" = ${personId}
+      ORDER BY v."visitDate" desc, c.name, ser.name, st.name
     `.execute(this.db);
     return result.rows;
   }
@@ -90,12 +112,12 @@ export class AttendanceRepo extends KyselyRepo {
     const sDate = DateHelper.toMysqlDate(startDate);
     const eDate = DateHelper.toMysqlDate(endDate);
     const result = await sql`
-      SELECT v.*, c.id as campusId, c.name as campusName
+      SELECT v.*, c.id as "campusId", c.name as "campusName"
       FROM visits v
-      INNER JOIN services ser on ser.id = v.serviceId
-      INNER JOIN campuses c on c.id = ser.campusId
-      WHERE v.churchId=${churchId} AND ser.campusId=${campusId}
-      AND v.visitDate BETWEEN ${sDate} AND ${eDate}
+      INNER JOIN services ser on ser.id = v."serviceId"
+      INNER JOIN campuses c on c.id = ser."campusId"
+      WHERE v."churchId"=${churchId} AND ser."campusId"=${campusId}
+      AND v."visitDate" BETWEEN ${sDate} AND ${eDate}
     `.execute(this.db);
     return result.rows;
   }
@@ -104,11 +126,11 @@ export class AttendanceRepo extends KyselyRepo {
     const sDate = DateHelper.toMysqlDate(startDate);
     const eDate = DateHelper.toMysqlDate(endDate);
     const result = await sql`
-      SELECT v.*, ser.name as serviceName
+      SELECT v.*, ser.name as "serviceName"
       FROM visits v
-      INNER JOIN services ser on ser.id = v.serviceId
-      WHERE v.churchId=${churchId} AND v.serviceId=${serviceId}
-      AND v.visitDate BETWEEN ${sDate} AND ${eDate}
+      INNER JOIN services ser on ser.id = v."serviceId"
+      WHERE v."churchId"=${churchId} AND v."serviceId"=${serviceId}
+      AND v."visitDate" BETWEEN ${sDate} AND ${eDate}
     `.execute(this.db);
     return result.rows;
   }
@@ -117,13 +139,13 @@ export class AttendanceRepo extends KyselyRepo {
     const sDate = DateHelper.toMysqlDate(startDate);
     const eDate = DateHelper.toMysqlDate(endDate);
     const result = await sql`
-      SELECT v.*, st.name as serviceTimeName
+      SELECT v.*, st.name as "serviceTimeName"
       FROM visits v
-      INNER JOIN visitSessions vs on vs.visitId = v.id
-      INNER JOIN sessions s on s.id = vs.sessionId
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      WHERE v.churchId=${churchId} AND st.id=${serviceTimeId}
-      AND v.visitDate BETWEEN ${sDate} AND ${eDate}
+      INNER JOIN "visitSessions" vs on vs."visitId" = v.id
+      INNER JOIN sessions s on s.id = vs."sessionId"
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      WHERE v."churchId"=${churchId} AND st.id=${serviceTimeId}
+      AND v."visitDate" BETWEEN ${sDate} AND ${eDate}
     `.execute(this.db);
     return result.rows;
   }
@@ -134,10 +156,10 @@ export class AttendanceRepo extends KyselyRepo {
     const result = await sql`
       SELECT v.*
       FROM visits v
-      INNER JOIN visitSessions vs on vs.visitId = v.id
-      INNER JOIN sessions s on s.id = vs.sessionId
-      WHERE v.churchId=${churchId} AND s.groupId=${groupId}
-      AND v.visitDate BETWEEN ${sDate} AND ${eDate}
+      INNER JOIN "visitSessions" vs on vs."visitId" = v.id
+      INNER JOIN sessions s on s.id = vs."sessionId"
+      WHERE v."churchId"=${churchId} AND s."groupId"=${groupId}
+      AND v."visitDate" BETWEEN ${sDate} AND ${eDate}
     `.execute(this.db);
     return result.rows;
   }

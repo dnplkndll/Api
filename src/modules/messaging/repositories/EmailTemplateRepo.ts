@@ -20,7 +20,7 @@ export class EmailTemplateRepo extends KyselyRepo {
       }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO emailTemplates (id, churchId, name, subject, htmlContent, category, dateCreated, dateModified) VALUES (${model.id}, ${model.churchId}, ${model.name}, ${model.subject}, ${model.htmlContent}, ${model.category}, NOW(), NOW())`.execute(this.db);
+      await sql`INSERT INTO "emailTemplates" (id, "churchId", name, subject, "htmlContent", category, "dateCreated", "dateModified") VALUES (${model.id}, ${model.churchId}, ${model.name}, ${model.subject}, ${model.htmlContent}, ${model.category}, NOW(), NOW())`.execute(this.db);
     }
     return model;
   }

@@ -49,18 +49,18 @@ export class UserChurchRepo extends KyselyRepo {
   }
 
   public async loadByPersonId(personId: string, churchId: string): Promise<any> {
-    const result = await sql`SELECT uc.*, u.email FROM userChurches uc
-      INNER JOIN users u ON u.id = uc.userId
-      WHERE uc.personId=${personId} AND uc.churchId=${churchId}`.execute(this.db);
+    const result = await sql`SELECT uc.*, u.email FROM "userChurches" uc
+      INNER JOIN users u ON u.id = uc."userId"
+      WHERE uc."personId"=${personId} AND uc."churchId"=${churchId}`.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
 
   public async loadForUser(userId: string): Promise<any[]> {
-    const result = await sql`SELECT uc.*, c.id as churchId, c.name as churchName, c.subDomain, p.id as activePersonId, p.firstName, p.lastName, p.displayName
-      FROM userChurches uc
-      INNER JOIN churches c ON c.id = uc.churchId AND c.archivedDate IS NULL
-      LEFT JOIN people p ON p.id = uc.personId AND p.churchId = uc.churchId AND (p.removed = 0 OR p.removed IS NULL)
-      WHERE uc.userId = ${userId}`.execute(this.db);
+    const result = await sql`SELECT uc.*, c.id as "churchId", c.name as "churchName", c."subDomain", p.id as "activePersonId", p."firstName", p."lastName", p."displayName"
+      FROM "userChurches" uc
+      INNER JOIN churches c ON c.id = uc."churchId" AND c."archivedDate" IS NULL
+      LEFT JOIN people p ON p.id = uc."personId" AND p."churchId" = uc."churchId" AND (p.removed = false OR p.removed IS NULL)
+      WHERE uc."userId" = ${userId}`.execute(this.db);
     const rows = result.rows as any[];
     return rows.map((row: any) => ({
       id: row.id,

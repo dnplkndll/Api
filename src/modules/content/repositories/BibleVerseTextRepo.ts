@@ -63,7 +63,7 @@ export class BibleVerseTextRepo extends GlobalKyselyRepo {
 
   public async save(model: any) {
     if (!model.id) model.id = UniqueIdHelper.shortId();
-    await sql`INSERT INTO bibleVerseTexts (id, translationKey, verseKey, bookKey, chapterNumber, verseNumber, content, newParagraph) VALUES (${model.id}, ${model.translationKey}, ${model.verseKey}, ${model.bookKey}, ${model.chapterNumber}, ${model.verseNumber}, ${model.content}, ${model.newParagraph}) ON DUPLICATE KEY UPDATE content=VALUES(content), newParagraph=VALUES(newParagraph)`.execute(this.db);
+    await sql`INSERT INTO "bibleVerseTexts" (id, "translationKey", "verseKey", "bookKey", "chapterNumber", "verseNumber", content, "newParagraph") VALUES (${model.id}, ${model.translationKey}, ${model.verseKey}, ${model.bookKey}, ${model.chapterNumber}, ${model.verseNumber}, ${model.content}, ${model.newParagraph}) ON DUPLICATE KEY UPDATE content=VALUES(content), "newParagraph"=VALUES("newParagraph")`.execute(this.db);
     return model;
   }
 }

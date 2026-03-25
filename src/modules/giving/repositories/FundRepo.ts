@@ -9,13 +9,13 @@ export class FundRepo extends KyselyRepo {
 
   public override async loadAll(churchId: string) {
     return this.db.selectFrom("funds").selectAll()
-      .where("churchId", "=", churchId).where("removed", "=", 0)
+      .where("churchId", "=", churchId).where("removed", "=", false as any)
       .orderBy("name").execute();
   }
 
   public async getOrCreateGeneral(churchId: string) {
     const data = await this.db.selectFrom("funds").selectAll()
-      .where("churchId", "=", churchId).where("name", "=", "(General Fund)").where("removed", "=", 0)
+      .where("churchId", "=", churchId).where("name", "=", "(General Fund)").where("removed", "=", false as any)
       .executeTakeFirst() ?? null;
 
     if (data !== null) return this.convertToModel(churchId, data);

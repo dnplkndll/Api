@@ -42,7 +42,7 @@ export class SermonRepo extends KyselyRepo {
   }
 
   public async loadTimeline(sermonIds: string[]) {
-    const result = await sql`select 'sermon' as postType, id as postId, title, description, thumbnail from sermons where id in (${sql.join(sermonIds)})`.execute(this.db);
+    const result = await sql`select 'sermon' as "postType", id as "postId", title, description, thumbnail from sermons where id in (${sql.join(sermonIds)})`.execute(this.db);
     return result.rows as any[];
   }
 }

@@ -11,7 +11,7 @@ export class FormSubmissionRepo extends KyselyRepo {
 
   public async save(model: any) {
     if (model.id) {
-      await sql`UPDATE formSubmissions SET contentId=${model.contentId}, revisedBy=${model.revisedBy}, revisionDate=NOW() WHERE id=${model.id} AND churchId=${model.churchId}`.execute(this.db);
+      await sql`UPDATE "formSubmissions" SET "contentId"=${model.contentId}, "revisedBy"=${model.revisedBy}, "revisionDate"=NOW() WHERE id=${model.id} AND "churchId"=${model.churchId}`.execute(this.db);
     } else {
       model.id = this.createId();
       const submissionDate = DateHelper.toMysqlDate(model.submissionDate);

@@ -16,7 +16,7 @@ export class RegistrationMemberRepo extends KyselyRepo {
   }
 
   public async loadForEvent(churchId: string, eventId: string) {
-    const result = await sql`SELECT rm.* FROM registrationMembers rm INNER JOIN registrations r ON rm.registrationId=r.id WHERE r.churchId=${churchId} AND r.eventId=${eventId}`.execute(this.db);
+    const result = await sql`SELECT rm.* FROM "registrationMembers" rm INNER JOIN registrations r ON rm."registrationId"=r.id WHERE r."churchId"=${churchId} AND r."eventId"=${eventId}`.execute(this.db);
     return result.rows as any[];
   }
 

@@ -22,11 +22,11 @@ export class TaskRepo extends KyselyRepo {
     const taskNumber = await this.loadNextTaskNumber(task.churchId || "");
 
     await sql`
-      INSERT INTO tasks (id, churchId, taskNumber, taskType, dateCreated, dateClosed,
-        associatedWithType, associatedWithId, associatedWithLabel,
-        createdByType, createdById, createdByLabel,
-        assignedToType, assignedToId, assignedToLabel,
-        title, status, automationId, conversationId, data)
+      INSERT INTO tasks (id, "churchId", "taskNumber", "taskType", "dateCreated", "dateClosed",
+        "associatedWithType", "associatedWithId", "associatedWithLabel",
+        "createdByType", "createdById", "createdByLabel",
+        "assignedToType", "assignedToId", "assignedToLabel",
+        title, status, "automationId", "conversationId", data)
       VALUES (${task.id}, ${task.churchId}, ${taskNumber}, ${task.taskType}, now(), ${task.dateClosed},
         ${task.associatedWithType}, ${task.associatedWithId}, ${task.associatedWithLabel},
         ${task.createdByType}, ${task.createdById}, ${task.createdByLabel},
@@ -49,21 +49,21 @@ export class TaskRepo extends KyselyRepo {
   }
 
   private async loadNextTaskNumber(churchId: string) {
-    const result = await sql`select max(ifnull(taskNumber, 0)) + 1 as taskNumber from tasks where churchId=${churchId}`.execute(this.db);
+    const result = await sql`select max(COALESCE("taskNumber", 0)) + 1 as "taskNumber" from tasks where "churchId"=${churchId}`.execute(this.db);
     return ((result.rows as any[])[0] as any).taskNumber;
   }
 
   public async loadTimeline(churchId: string, personId: string, taskIds: string[]) {
     if (taskIds.length > 0) {
       const result = await sql`
-        select *, 'task' as postType, id as postId from tasks
-        where churchId=${churchId} AND (
+        select *, 'task' as "postType", id as "postId" from tasks
+        where "churchId"=${churchId} AND (
           status='Open' and (
-            (associatedWithType='person' and associatedWithId=${personId})
+            ("associatedWithType"='person' and "associatedWithId"=${personId})
             OR
-            (createdByType='person' and createdById=${personId})
+            ("createdByType"='person' and "createdById"=${personId})
             OR
-            (assignedToType='person' and assignedToId=${personId})
+            ("assignedToType"='person' and "assignedToId"=${personId})
           )
         )
         OR id IN (${sql.join(taskIds)})
@@ -71,14 +71,14 @@ export class TaskRepo extends KyselyRepo {
       return result.rows;
     } else {
       const result = await sql`
-        select *, 'task' as postType, id as postId from tasks
-        where churchId=${churchId} AND (
+        select *, 'task' as "postType", id as "postId" from tasks
+        where "churchId"=${churchId} AND (
           status='Open' and (
-            (associatedWithType='person' and associatedWithId=${personId})
+            ("associatedWithType"='person' and "associatedWithId"=${personId})
             OR
-            (createdByType='person' and createdById=${personId})
+            ("createdByType"='person' and "createdById"=${personId})
             OR
-            (assignedToType='person' and assignedToId=${personId})
+            ("assignedToType"='person' and "assignedToId"=${personId})
           )
         )
       `.execute(this.db);
@@ -107,9 +107,9 @@ export class TaskRepo extends KyselyRepo {
 
   private async loadByAutomationIdContentNoRepeat(churchId: string, automationId: string, associatedWithType: string, associatedWithIds: string[]) {
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId} AND automationId=${automationId}
-      AND associatedWithType=${associatedWithType} AND associatedWithId IN (${sql.join(associatedWithIds)})
-      order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId} AND "automationId"=${automationId}
+      AND "associatedWithType"=${associatedWithType} AND "associatedWithId" IN (${sql.join(associatedWithIds)})
+      order by "taskNumber"
     `.execute(this.db);
     return result.rows as any[];
   }
@@ -118,9 +118,9 @@ export class TaskRepo extends KyselyRepo {
     const threshold = new Date();
     threshold.setFullYear(threshold.getFullYear() - 1);
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId} AND automationId=${automationId}
-      AND associatedWithType=${associatedWithType} AND associatedWithId IN (${sql.join(associatedWithIds)})
-      and dateCreated>${threshold} order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId} AND "automationId"=${automationId}
+      AND "associatedWithType"=${associatedWithType} AND "associatedWithId" IN (${sql.join(associatedWithIds)})
+      and "dateCreated">${threshold} order by "taskNumber"
     `.execute(this.db);
     return result.rows as any[];
   }
@@ -129,9 +129,9 @@ export class TaskRepo extends KyselyRepo {
     const threshold = new Date();
     threshold.setMonth(threshold.getMonth() - 1);
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId} AND automationId=${automationId}
-      AND associatedWithType=${associatedWithType} AND associatedWithId IN (${sql.join(associatedWithIds)})
-      and dateCreated>${threshold} order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId} AND "automationId"=${automationId}
+      AND "associatedWithType"=${associatedWithType} AND "associatedWithId" IN (${sql.join(associatedWithIds)})
+      and "dateCreated">${threshold} order by "taskNumber"
     `.execute(this.db);
     return result.rows as any[];
   }
@@ -140,18 +140,18 @@ export class TaskRepo extends KyselyRepo {
     const threshold = new Date();
     threshold.setDate(threshold.getDate() - 7);
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId} AND automationId=${automationId}
-      AND associatedWithType=${associatedWithType} AND associatedWithId IN (${sql.join(associatedWithIds)})
-      and dateCreated>${threshold} order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId} AND "automationId"=${automationId}
+      AND "associatedWithType"=${associatedWithType} AND "associatedWithId" IN (${sql.join(associatedWithIds)})
+      and "dateCreated">${threshold} order by "taskNumber"
     `.execute(this.db);
     return result.rows as any[];
   }
 
   public async loadForPerson(churchId: string, personId: string, status: string) {
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId}
-      AND ((assignedToType='person' AND assignedToId=${personId}) OR (createdByType='person' AND createdById=${personId}))
-      and status=${status} order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId}
+      AND (("assignedToType"='person' AND "assignedToId"=${personId}) OR ("createdByType"='person' AND "createdById"=${personId}))
+      and status=${status} order by "taskNumber"
     `.execute(this.db);
     return result.rows;
   }
@@ -159,9 +159,9 @@ export class TaskRepo extends KyselyRepo {
   public async loadForGroups(churchId: string, groupIds: string[], status: string) {
     if (groupIds.length === 0) return [];
     const result = await sql`
-      SELECT * FROM tasks WHERE churchId=${churchId}
-      AND ((assignedToType='group' AND assignedToId IN (${sql.join(groupIds)})) OR (createdByType='group' AND createdById IN (${sql.join(groupIds)})))
-      AND status=${status} order by taskNumber
+      SELECT * FROM tasks WHERE "churchId"=${churchId}
+      AND (("assignedToType"='group' AND "assignedToId" IN (${sql.join(groupIds)})) OR ("createdByType"='group' AND "createdById" IN (${sql.join(groupIds)})))
+      AND status=${status} order by "taskNumber"
     `.execute(this.db);
     return result.rows;
   }

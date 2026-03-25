@@ -1,6 +1,7 @@
 import { injectable } from "inversify";
 import { sql } from "kysely";
 import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class ClientErrorRepo extends GlobalKyselyRepo {
@@ -20,7 +21,10 @@ export class ClientErrorRepo extends GlobalKyselyRepo {
   }
 
   public async deleteOld() {
-    await sql`DELETE FROM clientErrors WHERE errorTime<date_add(NOW(), INTERVAL -7 DAY)`.execute(this.db);
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '7 days'`
+      : sql`date_add(NOW(), INTERVAL -7 DAY)`;
+    await sql`DELETE FROM "clientErrors" WHERE "errorTime"<${dateSub}`.execute(this.db);
   }
 
   public async load(id: string) {

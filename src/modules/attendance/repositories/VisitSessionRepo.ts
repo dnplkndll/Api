@@ -35,19 +35,19 @@ export class VisitSessionRepo extends KyselyRepo {
     const result = await sql`
       SELECT v.*
       FROM sessions s
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      INNER JOIN visits v on(v.serviceId = st.serviceId or v.groupId = s.groupId) and v.visitDate = s.sessionDate
-      WHERE v.churchId=${churchId} AND s.id = ${sessionId} AND v.personId=${personId} LIMIT 1
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      INNER JOIN visits v on(v."serviceId" = st."serviceId" or v."groupId" = s."groupId") and v."visitDate" = s."sessionDate"
+      WHERE v."churchId"=${churchId} AND s.id = ${sessionId} AND v."personId"=${personId} LIMIT 1
     `.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
 
   public async loadForSession(churchId: string, sessionId: string) {
     const result = await sql`
-      SELECT vs.*, v.personId
-      FROM visitSessions vs
-      INNER JOIN visits v on v.id = vs.visitId
-      WHERE vs.churchId=${churchId} AND vs.sessionId = ${sessionId}
+      SELECT vs.*, v."personId"
+      FROM "visitSessions" vs
+      INNER JOIN visits v on v.id = vs."visitId"
+      WHERE vs."churchId"=${churchId} AND vs."sessionId" = ${sessionId}
     `.execute(this.db);
     return result.rows;
   }

@@ -75,7 +75,7 @@ export class ElementRepo extends KyselyRepo {
   }
 
   public async loadForPage(churchId: string, pageId: string) {
-    const result = await sql`SELECT e.* FROM elements e INNER JOIN sections s on s.id=e.sectionId WHERE (s.pageId=${pageId} OR (s.pageId IS NULL and s.blockId IS NULL)) AND e.churchId=${churchId} ORDER BY sort`.execute(this.db);
+    const result = await sql`SELECT e.* FROM elements e INNER JOIN sections s on s.id=e."sectionId" WHERE (s."pageId"=${pageId} OR (s."pageId" IS NULL and s."blockId" IS NULL)) AND e."churchId"=${churchId} ORDER BY sort`.execute(this.db);
     return result.rows as any[];
   }
 }

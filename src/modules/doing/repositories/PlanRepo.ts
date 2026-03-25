@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { sql } from "kysely";
 import { UniqueIdHelper } from "@churchapps/apihelper";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class PlanRepo extends KyselyRepo {
@@ -39,10 +40,13 @@ export class PlanRepo extends KyselyRepo {
   }
 
   public async load7Days(churchId: string) {
+    const endDate = getDialect() === "postgres"
+      ? sql`CURRENT_DATE + INTERVAL '7 days'`
+      : sql`CURRENT_DATE + INTERVAL 7 DAY`;
     const result = await sql`
-      SELECT * FROM plans WHERE churchId=${churchId}
-      AND serviceDate BETWEEN CURDATE() AND (CURDATE() + INTERVAL 7 DAY)
-      order by serviceDate desc
+      SELECT * FROM plans WHERE "churchId"=${churchId}
+      AND "serviceDate" BETWEEN CURRENT_DATE AND ${endDate}
+      order by "serviceDate" desc
     `.execute(this.db);
     return result.rows;
   }
@@ -55,8 +59,8 @@ export class PlanRepo extends KyselyRepo {
 
   public async loadCurrentByPlanTypeId(planTypeId: string) {
     const result = await sql`
-      SELECT * FROM plans WHERE planTypeId=${planTypeId} AND serviceDate>=CURDATE()
-      ORDER by serviceDate LIMIT 1
+      SELECT * FROM plans WHERE "planTypeId"=${planTypeId} AND "serviceDate">=CURRENT_DATE
+      ORDER by "serviceDate" LIMIT 1
     `.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
@@ -64,9 +68,9 @@ export class PlanRepo extends KyselyRepo {
   public async loadSignupPlans(churchId: string) {
     const result = await sql`
       SELECT DISTINCT p.* FROM plans p
-      INNER JOIN positions pos ON pos.planId = p.id AND pos.churchId = p.churchId
-      WHERE p.churchId = ${churchId} AND pos.allowSelfSignup = 1 AND p.serviceDate >= CURDATE()
-      ORDER BY p.serviceDate ASC
+      INNER JOIN positions pos ON pos."planId" = p.id AND pos."churchId" = p."churchId"
+      WHERE p."churchId" = ${churchId} AND pos."allowSelfSignup" = true AND p."serviceDate" >= CURRENT_DATE
+      ORDER BY p."serviceDate" ASC
     `.execute(this.db);
     return result.rows;
   }

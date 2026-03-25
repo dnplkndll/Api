@@ -16,7 +16,7 @@ export class GroupRepo extends KyselyRepo {
 
   public async deleteByIds(churchId: string, ids: string[]) {
     if (ids.length === 0) return;
-    await this.db.updateTable(this.tableName).set({ removed: 1 } as any)
+    await this.db.updateTable(this.tableName).set({ removed: true } as any)
       .where("id", "in", ids)
       .where("churchId", "=", churchId)
       .execute();
@@ -26,7 +26,7 @@ export class GroupRepo extends KyselyRepo {
     return await this.db.selectFrom(this.tableName).selectAll()
       .where("id", "=", id)
       .where("churchId", "=", churchId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .executeTakeFirst() ?? null;
   }
 
@@ -34,27 +34,27 @@ export class GroupRepo extends KyselyRepo {
     return await this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
       .where("slug", "=", slug)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .executeTakeFirst() ?? null;
   }
 
   public async loadByTag(churchId: string, tag: string) {
-    const result = await sql`SELECT *, (SELECT COUNT(*) FROM groupMembers gm WHERE gm.groupId=g.id) AS memberCount FROM \`groups\` g WHERE churchId=${churchId} AND removed=0 AND tags like ${"%" + tag + "%"} ORDER by categoryName, name`.execute(this.db);
+    const result = await sql`SELECT *, (SELECT COUNT(*) FROM "groupMembers" gm WHERE gm."groupId"=g.id) AS "memberCount" FROM "groups" g WHERE "churchId"=${churchId} AND removed=false AND tags like ${"%" + tag + "%"} ORDER by "categoryName", name`.execute(this.db);
     return result.rows;
   }
 
   public async loadAll(churchId: string) {
-    const result = await sql`SELECT *, (SELECT COUNT(*) FROM groupMembers gm WHERE gm.groupId=g.id) AS memberCount FROM \`groups\` g WHERE churchId=${churchId} AND removed=0 ORDER by categoryName, name`.execute(this.db);
+    const result = await sql`SELECT *, (SELECT COUNT(*) FROM "groupMembers" gm WHERE gm."groupId"=g.id) AS "memberCount" FROM "groups" g WHERE "churchId"=${churchId} AND removed=false ORDER by "categoryName", name`.execute(this.db);
     return result.rows;
   }
 
   public async loadAllForPerson(personId: string) {
-    const result = await sql`SELECT distinct g.* FROM groupMembers gm INNER JOIN \`groups\` g on g.id=gm.groupId WHERE personId=${personId} and g.removed=0 ORDER BY name`.execute(this.db);
+    const result = await sql`SELECT distinct g.* FROM "groupMembers" gm INNER JOIN "groups" g on g.id=gm."groupId" WHERE "personId"=${personId} and g.removed=false ORDER BY name`.execute(this.db);
     return result.rows;
   }
 
   public async loadForPerson(personId: string) {
-    const result = await sql`SELECT distinct g.* FROM groupMembers gm INNER JOIN \`groups\` g on g.id=gm.groupId WHERE personId=${personId} and g.removed=0 and g.tags like '%standard%' ORDER BY name`.execute(this.db);
+    const result = await sql`SELECT distinct g.* FROM "groupMembers" gm INNER JOIN "groups" g on g.id=gm."groupId" WHERE "personId"=${personId} and g.removed=false and g.tags like '%standard%' ORDER BY name`.execute(this.db);
     return result.rows;
   }
 
@@ -71,19 +71,19 @@ export class GroupRepo extends KyselyRepo {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
       .where("labels", "like", "%" + label + "%")
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .orderBy("name")
       .execute();
   }
 
   public async search(churchId: string, campusId: string, serviceId: string, serviceTimeId: string) {
-    const result = await sql`SELECT g.id, g.categoryName, g.name
-      FROM \`groups\` g
-      LEFT OUTER JOIN groupServiceTimes gst on gst.groupId=g.id
-      LEFT OUTER JOIN serviceTimes st on st.id=gst.serviceTimeId
-      LEFT OUTER JOIN services s on s.id=st.serviceId
-      WHERE g.churchId = ${churchId} AND (${serviceTimeId}=0 OR gst.serviceTimeId=${serviceTimeId}) AND (${serviceId}=0 OR st.serviceId=${serviceId}) AND (${campusId} = 0 OR s.campusId = ${campusId}) and g.removed=0
-      GROUP BY g.id, g.categoryName, g.name ORDER BY g.name`.execute(this.db);
+    const result = await sql`SELECT g.id, g."categoryName", g.name
+      FROM "groups" g
+      LEFT OUTER JOIN "groupServiceTimes" gst on gst."groupId"=g.id
+      LEFT OUTER JOIN "serviceTimes" st on st.id=gst."serviceTimeId"
+      LEFT OUTER JOIN services s on s.id=st."serviceId"
+      WHERE g."churchId" = ${churchId} AND (${serviceTimeId}=0 OR gst."serviceTimeId"=${serviceTimeId}) AND (${serviceId}=0 OR st."serviceId"=${serviceId}) AND (${campusId} = 0 OR s."campusId" = ${campusId}) and g.removed=false
+      GROUP BY g.id, g."categoryName", g.name ORDER BY g.name`.execute(this.db);
     return result.rows;
   }
 

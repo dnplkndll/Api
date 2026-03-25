@@ -1,6 +1,7 @@
 import { DateHelper, UniqueIdHelper } from "@churchapps/apihelper";
 import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 import { injectable } from "inversify";
 
 @injectable()
@@ -49,9 +50,9 @@ export class RegistrationRepo extends KyselyRepo {
   }
 
   public async countActiveForEvent(churchId: string, eventId: string): Promise<number> {
-    const result = await sql`SELECT COUNT(*) as cnt FROM registrations WHERE churchId=${churchId} AND eventId=${eventId} AND status IN ('pending','confirmed')`.execute(this.db);
+    const result = await sql`SELECT COUNT(*) as cnt FROM registrations WHERE "churchId"=${churchId} AND "eventId"=${eventId} AND status IN ('pending','confirmed')`.execute(this.db);
     const row = (result.rows as any[])[0];
-    return row?.cnt || 0;
+    return Number(row?.cnt) || 0;
   }
 
   public async atomicInsertWithCapacityCheck(registration: any, capacity: number | null): Promise<boolean> {
@@ -65,7 +66,8 @@ export class RegistrationRepo extends KyselyRepo {
       return true;
     }
 
-    const result: any = await sql`INSERT INTO registrations (id, churchId, eventId, personId, householdId, status, formSubmissionId, notes, registeredDate, cancelledDate) SELECT ${m.id}, ${m.churchId}, ${m.eventId}, ${m.personId || null}, ${m.householdId || null}, ${m.status || "confirmed"}, ${m.formSubmissionId || null}, ${m.notes || null}, ${m.registeredDate || null}, ${m.cancelledDate || null} FROM dual WHERE (SELECT COUNT(*) FROM registrations WHERE eventId=${m.eventId} AND churchId=${m.churchId} AND status IN ('pending','confirmed')) < ${capacity}`.execute(this.db);
+    const selectFrom = getDialect() === "postgres" ? sql`` : sql`FROM dual`;
+    const result: any = await sql`INSERT INTO registrations (id, "churchId", "eventId", "personId", "householdId", status, "formSubmissionId", notes, "registeredDate", "cancelledDate") SELECT ${m.id}, ${m.churchId}, ${m.eventId}, ${m.personId || null}, ${m.householdId || null}, ${m.status || "confirmed"}, ${m.formSubmissionId || null}, ${m.notes || null}, ${m.registeredDate || null}, ${m.cancelledDate || null} ${selectFrom} WHERE (SELECT COUNT(*) FROM registrations WHERE "eventId"=${m.eventId} AND "churchId"=${m.churchId} AND status IN ('pending','confirmed')) < ${capacity}`.execute(this.db);
     if (result?.numAffectedRows > 0n || result?.numUpdatedOrDeletedRows > 0n) {
       registration.id = m.id;
       return true;

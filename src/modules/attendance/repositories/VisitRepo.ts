@@ -32,9 +32,9 @@ export class VisitRepo extends KyselyRepo {
     const result = await sql`
       SELECT v.*
       FROM sessions s
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      INNER JOIN visits v on(v.serviceId = st.serviceId or v.groupId = s.groupId) and v.visitDate = s.sessionDate
-      WHERE v.churchId=${churchId} AND s.id = ${sessionId} AND v.personId=${personId} LIMIT 1
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      INNER JOIN visits v on(v."serviceId" = st."serviceId" or v."groupId" = s."groupId") and v."visitDate" = s."sessionDate"
+      WHERE v."churchId"=${churchId} AND s.id = ${sessionId} AND v."personId"=${personId} LIMIT 1
     `.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
@@ -54,7 +54,7 @@ export class VisitRepo extends KyselyRepo {
     result.setHours(0, 0, 0, 0);
 
     const data = await this.db.selectFrom("visits")
-      .select(sql`max(visitDate)`.as("visitDate"))
+      .select(sql`max("visitDate")`.as("visitDate"))
       .where("churchId", "=", churchId)
       .where("serviceId", "=", serviceId)
       .where("personId", "in", peopleIds)
@@ -74,11 +74,11 @@ export class VisitRepo extends KyselyRepo {
   public async loadConsecutiveWeekStreaks(churchId: string, personIds: string[]): Promise<Record<string, number>> {
     if (personIds.length === 0) return {};
     const result = await sql`
-      SELECT personId, YEARWEEK(visitDate, 3) AS yw
+      SELECT "personId", YEARWEEK("visitDate", 3) AS yw
       FROM visits
-      WHERE churchId = ${churchId} AND personId IN (${sql.join(personIds)})
-      GROUP BY personId, yw
-      ORDER BY personId, yw DESC
+      WHERE "churchId" = ${churchId} AND "personId" IN (${sql.join(personIds)})
+      GROUP BY "personId", yw
+      ORDER BY "personId", yw DESC
     `.execute(this.db);
     const rows = result.rows as any[];
 

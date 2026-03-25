@@ -34,7 +34,7 @@ export class SongDetailRepo extends GlobalKyselyRepo {
 
   public async search(query: string) {
     const q = "%" + query.replace(/ /g, "%") + "%";
-    const result = await sql`SELECT * FROM songDetails where title + ' ' + artist like ${q} or artist + ' ' + title like ${q}`.execute(this.db);
+    const result = await sql`SELECT * FROM "songDetails" where concat(title, ' ', artist) like ${q} or concat(artist, ' ', title) like ${q}`.execute(this.db);
     return result.rows as any[];
   }
 
@@ -45,7 +45,7 @@ export class SongDetailRepo extends GlobalKyselyRepo {
   }
 
   public async loadForChurch(churchId: string) {
-    const result = await sql`SELECT sd.*, s.Id as songId, s.churchId FROM songs s INNER JOIN arrangements a on a.songId=s.id INNER JOIN songDetails sd on sd.id=a.songDetailId WHERE s.churchId=${churchId} ORDER BY sd.title, sd.artist`.execute(this.db);
+    const result = await sql`SELECT sd.*, s.id as "songId", s."churchId" FROM songs s INNER JOIN arrangements a on a."songId"=s.id INNER JOIN "songDetails" sd on sd.id=a."songDetailId" WHERE s."churchId"=${churchId} ORDER BY sd.title, sd.artist`.execute(this.db);
     return result.rows as any[];
   }
 }

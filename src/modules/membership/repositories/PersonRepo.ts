@@ -59,7 +59,7 @@ export class PersonRepo extends KyselyRepo {
         householdRole: person.householdRole,
         conversationId: person.conversationId,
         optedOut: person.optedOut,
-        removed: 0
+        removed: false
       };
       await this.db.insertInto(this.tableName).values(values).execute();
     }
@@ -107,7 +107,7 @@ export class PersonRepo extends KyselyRepo {
   }
 
   public async restore(churchId: string, id: string) {
-    await this.db.updateTable(this.tableName).set({ removed: 0 } as any)
+    await this.db.updateTable(this.tableName).set({ removed: false } as any)
       .where("id", "=", id).where("churchId", "=", churchId).execute();
   }
 
@@ -129,7 +129,7 @@ export class PersonRepo extends KyselyRepo {
   public async loadMembers(churchId: string) {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .where("membershipStatus", "in", ["Member", "Staff"])
       .execute();
   }
@@ -145,14 +145,14 @@ export class PersonRepo extends KyselyRepo {
     }
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .where("membershipStatus", "in", statusFilter)
       .execute();
   }
 
   public async loadRecent(churchId: string, filterOptedOut?: boolean) {
     const filterClause = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
-    const result = await sql`SELECT * FROM (SELECT * FROM people WHERE churchId=${churchId} AND removed=0${sql.raw(filterClause)} order by id desc limit 25) people ORDER BY lastName, firstName`.execute(this.db);
+    const result = await sql`SELECT * FROM (SELECT * FROM people WHERE "churchId"=${churchId} AND removed=false${sql.raw(filterClause)} order by id desc limit 25) people ORDER BY "lastName", "firstName"`.execute(this.db);
     return result.rows;
   }
 
@@ -160,20 +160,20 @@ export class PersonRepo extends KyselyRepo {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
       .where("householdId", "=", householdId)
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .execute();
   }
 
   public async search(churchId: string, term: string, filterOptedOut?: boolean) {
     const filterClause = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
     const searchTerm = "%" + term.replace(" ", "%") + "%";
-    const result = await sql`SELECT * FROM people WHERE churchId=${churchId} AND concat(IFNULL(FirstName,''), ' ', IFNULL(MiddleName,''), ' ', IFNULL(NickName,''), ' ', IFNULL(LastName,''), ' ', IFNULL(donorNumber,'')) LIKE ${searchTerm} AND removed=0${sql.raw(filterClause)} LIMIT 100`.execute(this.db);
+    const result = await sql`SELECT * FROM people WHERE "churchId"=${churchId} AND concat(COALESCE("firstName",''), ' ', COALESCE("middleName",''), ' ', COALESCE("nickName",''), ' ', COALESCE("lastName",''), ' ', COALESCE("donorNumber",'')) LIKE ${searchTerm} AND removed=false${sql.raw(filterClause)} LIMIT 100`.execute(this.db);
     return result.rows;
   }
 
   public async searchPhone(churchId: string, phonestring: string) {
     const phoneSearch = "%" + phonestring.replace(/ |-/g, "%") + "%";
-    const result = await sql`SELECT * FROM people WHERE churchId=${churchId} AND (REPLACE(REPLACE(HomePhone,'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE(WorkPhone,'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE(MobilePhone,'-',''), ' ', '') LIKE ${phoneSearch}) AND removed=0 LIMIT 100`.execute(this.db);
+    const result = await sql`SELECT * FROM people WHERE "churchId"=${churchId} AND (REPLACE(REPLACE("homePhone",'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE("workPhone",'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE("mobilePhone",'-',''), ' ', '') LIKE ${phoneSearch}) AND removed=false LIMIT 100`.execute(this.db);
     return result.rows;
   }
 
@@ -181,31 +181,31 @@ export class PersonRepo extends KyselyRepo {
     return this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId)
       .where("email", "like", "%" + email + "%")
-      .where("removed", "=", 0)
+      .where("removed", "=", false as any)
       .limit(100)
       .execute();
   }
 
   public async loadAttendees(churchId: string, campusId: string, serviceId: string, serviceTimeId: string, categoryName: string, groupId: string, startDate: Date, endDate: Date) {
-    let conditions = sql`p.churchId = ${churchId} AND v.visitDate BETWEEN ${startDate} AND ${endDate}`;
+    let conditions = sql`p."churchId" = ${churchId} AND v."visitDate" BETWEEN ${startDate} AND ${endDate}`;
 
-    if (!UniqueIdHelper.isMissing(campusId)) conditions = sql`${conditions} AND ser.campusId=${campusId}`;
+    if (!UniqueIdHelper.isMissing(campusId)) conditions = sql`${conditions} AND ser."campusId"=${campusId}`;
     if (!UniqueIdHelper.isMissing(serviceId)) conditions = sql`${conditions} AND ser.id=${serviceId}`;
     if (!UniqueIdHelper.isMissing(serviceTimeId)) conditions = sql`${conditions} AND st.id=${serviceTimeId}`;
-    if (categoryName !== "") conditions = sql`${conditions} AND g.categoryName=${categoryName}`;
+    if (categoryName !== "") conditions = sql`${conditions} AND g."categoryName"=${categoryName}`;
     if (!UniqueIdHelper.isMissing(groupId)) conditions = sql`${conditions} AND g.id=${groupId}`;
 
-    const result = await sql`SELECT p.Id, p.churchId, p.displayName, p.firstName, p.lastName, p.photoUpdated
-      FROM visitSessions vs
-      INNER JOIN visits v on v.id = vs.visitId
-      INNER JOIN sessions s on s.id = vs.sessionId
-      INNER JOIN people p on p.id = v.personId
-      INNER JOIN \`groups\` g on g.id = s.groupId
-      LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId
-      LEFT OUTER JOIN services ser on ser.id = st.serviceId
+    const result = await sql`SELECT p.id, p."churchId", p."displayName", p."firstName", p."lastName", p."photoUpdated"
+      FROM "visitSessions" vs
+      INNER JOIN visits v on v.id = vs."visitId"
+      INNER JOIN sessions s on s.id = vs."sessionId"
+      INNER JOIN people p on p.id = v."personId"
+      INNER JOIN "groups" g on g.id = s."groupId"
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      LEFT OUTER JOIN services ser on ser.id = st."serviceId"
       WHERE ${conditions}
-      GROUP BY p.id, p.displayName, p.firstName, p.lastName, p.photoUpdated
-      ORDER BY p.lastName, p.firstName`.execute(this.db);
+      GROUP BY p.id, p."displayName", p."firstName", p."lastName", p."photoUpdated"
+      ORDER BY p."lastName", p."firstName"`.execute(this.db);
     return result.rows;
   }
 

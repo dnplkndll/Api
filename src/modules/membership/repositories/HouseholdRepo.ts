@@ -9,7 +9,7 @@ export class HouseholdRepo extends KyselyRepo {
   protected readonly softDelete = false;
 
   public async deleteUnused(churchId: string) {
-    await sql`DELETE FROM households WHERE churchId=${churchId} AND id not in (SELECT householdId FROM people WHERE churchId=${churchId} AND householdId IS NOT NULL group by householdId)`.execute(this.db);
+    await sql`DELETE FROM households WHERE "churchId"=${churchId} AND id not in (SELECT "householdId" FROM people WHERE "churchId"=${churchId} AND "householdId" IS NOT NULL group by "householdId")`.execute(this.db);
   }
 
   public convertToModel(_churchId: string, data: any) {

@@ -42,17 +42,17 @@ export class DonationBatchRepo extends KyselyRepo {
   public override async loadAll(churchId: string) {
     const result = await sql`
       SELECT db.*,
-        IFNULL(d.donationCount, 0) AS donationCount,
-        IFNULL(d.totalAmount, 0) AS totalAmount
-      FROM donationBatches db
+        COALESCE(d."donationCount", 0) AS "donationCount",
+        COALESCE(d."totalAmount", 0) AS "totalAmount"
+      FROM "donationBatches" db
       LEFT JOIN (
-        SELECT batchId, COUNT(*) AS donationCount, SUM(amount) AS totalAmount
+        SELECT "batchId", COUNT(*) AS "donationCount", SUM(amount) AS "totalAmount"
         FROM donations
-        WHERE churchId = ${churchId}
-        GROUP BY batchId
-      ) d ON db.id = d.batchId
-      WHERE db.churchId = ${churchId}
-      ORDER BY db.batchDate DESC
+        WHERE "churchId" = ${churchId}
+        GROUP BY "batchId"
+      ) d ON db.id = d."batchId"
+      WHERE db."churchId" = ${churchId}
+      ORDER BY db."batchDate" DESC
     `.execute(this.db);
     return this.convertAllToModel(churchId, result.rows as any[]);
   }

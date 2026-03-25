@@ -36,20 +36,20 @@ export class MemberPermissionRepo extends KyselyRepo {
   }
 
   public async loadFormsByPerson(churchId: string, personId: string) {
-    const result = await sql`SELECT mp.*, p.displayName as personName
-      FROM memberPermissions mp
-      INNER JOIN people p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE mp.churchId=${churchId} AND mp.memberId=${personId}
-      ORDER BY mp.action, mp.emailNotification desc`.execute(this.db);
+    const result = await sql`SELECT mp.*, p."displayName" as "personName"
+      FROM "memberPermissions" mp
+      INNER JOIN people p on p.id=mp."memberId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE mp."churchId"=${churchId} AND mp."memberId"=${personId}
+      ORDER BY mp.action, mp."emailNotification" desc`.execute(this.db);
     return result.rows;
   }
 
   public async loadPeopleByForm(churchId: string, formId: string) {
-    const result = await sql`SELECT mp.*, p.displayName as personName
-      FROM memberPermissions mp
-      INNER JOIN people p on p.id=mp.memberId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE mp.churchId=${churchId} AND mp.contentId=${formId}
-      ORDER BY mp.action, mp.emailNotification desc`.execute(this.db);
+    const result = await sql`SELECT mp.*, p."displayName" as "personName"
+      FROM "memberPermissions" mp
+      INNER JOIN people p on p.id=mp."memberId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE mp."churchId"=${churchId} AND mp."contentId"=${formId}
+      ORDER BY mp.action, mp."emailNotification" desc`.execute(this.db);
     return result.rows;
   }
 

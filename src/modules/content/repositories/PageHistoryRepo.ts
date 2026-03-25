@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 import { injectable } from "inversify";
 
 @injectable()
@@ -34,6 +35,9 @@ export class PageHistoryRepo extends KyselyRepo {
   }
 
   public async deleteOldHistory(churchId: string, pageId: string, daysToKeep: number = 30) {
-    await sql`DELETE FROM pageHistory WHERE churchId=${churchId} AND pageId=${pageId} AND createdDate < DATE_SUB(NOW(), INTERVAL ${daysToKeep} DAY)`.execute(this.db);
+    const cutoff = getDialect() === "postgres"
+      ? sql`NOW() - ${sql.lit(daysToKeep)} * INTERVAL '1 day'`
+      : sql`DATE_SUB(NOW(), INTERVAL ${daysToKeep} DAY)`;
+    await sql`DELETE FROM "pageHistory" WHERE "churchId"=${churchId} AND "pageId"=${pageId} AND "createdDate" < ${cutoff}`.execute(this.db);
   }
 }

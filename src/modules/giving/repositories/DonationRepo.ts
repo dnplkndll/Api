@@ -4,6 +4,7 @@ import { UniqueIdHelper, DateHelper, ArrayHelper } from "@churchapps/apihelper";
 import { DateHelper as LocalDateHelper } from "../../../shared/helpers/DateHelper.js";
 import { Donation, DonationSummary } from "../models/index.js";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class DonationRepo extends KyselyRepo {
@@ -66,12 +67,12 @@ export class DonationRepo extends KyselyRepo {
 
   public async loadByPersonId(churchId: string, personId: string) {
     const result = await sql`
-      SELECT d.*, f.id as fundId, IFNULL(f.name, 'Unkown') as fundName, fd.amount as fundAmount
+      SELECT d.*, f.id as "fundId", COALESCE(f.name, 'Unkown') as "fundName", fd.amount as "fundAmount"
       FROM donations d
-      INNER JOIN fundDonations fd on fd.donationId = d.id
-      LEFT JOIN funds f on f.id = fd.fundId
-      WHERE d.churchId = ${churchId} AND d.personId = ${personId} AND (f.taxDeductible = 1 OR f.taxDeductible IS NULL)
-      ORDER BY d.donationDate DESC
+      INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+      LEFT JOIN funds f on f.id = fd."fundId"
+      WHERE d."churchId" = ${churchId} AND d."personId" = ${personId} AND (f."taxDeductible" = true OR f."taxDeductible" IS NULL)
+      ORDER BY d."donationDate" DESC
     `.execute(this.db);
     return result.rows;
   }
@@ -105,20 +106,20 @@ export class DonationRepo extends KyselyRepo {
     const eDate = DateHelper.toMysqlDate(endDate);
     if (fundId) {
       const result = await sql`
-        SELECT SUM(fd.amount) as totalGiving, AVG(d.amount) as avgGift, COUNT(DISTINCT d.personId) as donorCount, COUNT(DISTINCT d.id) as donationCount
+        SELECT SUM(fd.amount) as "totalGiving", AVG(d.amount) as "avgGift", COUNT(DISTINCT d."personId") as "donorCount", COUNT(DISTINCT d.id) as "donationCount"
         FROM donations d
-        INNER JOIN fundDonations fd on fd.donationId = d.id
-        INNER JOIN funds f on f.id = fd.fundId
-        WHERE d.churchId=${churchId} AND d.donationDate BETWEEN ${sDate} AND ${eDate} AND fd.fundId = ${fundId}
+        INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+        INNER JOIN funds f on f.id = fd."fundId"
+        WHERE d."churchId"=${churchId} AND d."donationDate" BETWEEN ${sDate} AND ${eDate} AND fd."fundId" = ${fundId}
       `.execute(this.db);
       return (result.rows as any[])[0] ?? null;
     } else {
       const result = await sql`
-        SELECT SUM(fd.amount) as totalGiving, AVG(d.amount) as avgGift, COUNT(DISTINCT d.personId) as donorCount, COUNT(DISTINCT d.id) as donationCount
+        SELECT SUM(fd.amount) as "totalGiving", AVG(d.amount) as "avgGift", COUNT(DISTINCT d."personId") as "donorCount", COUNT(DISTINCT d.id) as "donationCount"
         FROM donations d
-        INNER JOIN fundDonations fd on fd.donationId = d.id
-        INNER JOIN funds f on f.id = fd.fundId
-        WHERE d.churchId=${churchId} AND d.donationDate BETWEEN ${sDate} AND ${eDate}
+        INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+        INNER JOIN funds f on f.id = fd."fundId"
+        WHERE d."churchId"=${churchId} AND d."donationDate" BETWEEN ${sDate} AND ${eDate}
       `.execute(this.db);
       return (result.rows as any[])[0] ?? null;
     }
@@ -127,27 +128,39 @@ export class DonationRepo extends KyselyRepo {
   public async loadSummary(churchId: string, startDate: Date, endDate: Date) {
     const sDate = DateHelper.toMysqlDate(startDate);
     const eDate = DateHelper.toMysqlDate(endDate);
-    const result = await sql`
-      SELECT STR_TO_DATE(concat(year(d.donationDate), ' ', week(d.donationDate, 0), ' Sunday'), '%X %V %W') AS week, SUM(fd.amount) as totalAmount, f.name as fundName
-      FROM donations d
-      INNER JOIN fundDonations fd on fd.donationId = d.id
-      INNER JOIN funds f on f.id = fd.fundId AND f.taxDeductible = 1
-      WHERE d.churchId=${churchId}
-      AND d.donationDate BETWEEN ${sDate} AND ${eDate}
-      GROUP BY year(d.donationDate), week(d.donationDate, 0), f.name
-      ORDER BY year(d.donationDate), week(d.donationDate, 0), f.name
-    `.execute(this.db);
+    const isPg = getDialect() === "postgres";
+    const result = isPg
+      ? await sql`
+        SELECT DATE_TRUNC('week', d."donationDate") AS week, SUM(fd.amount) as "totalAmount", f.name as "fundName"
+        FROM donations d
+        INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+        INNER JOIN funds f on f.id = fd."fundId" AND f."taxDeductible" = true
+        WHERE d."churchId"=${churchId}
+        AND d."donationDate" BETWEEN ${sDate} AND ${eDate}
+        GROUP BY DATE_TRUNC('week', d."donationDate"), f.name
+        ORDER BY DATE_TRUNC('week', d."donationDate"), f.name
+      `.execute(this.db)
+      : await sql`
+        SELECT STR_TO_DATE(concat(year(d."donationDate"), ' ', week(d."donationDate", 0), ' Sunday'), '%X %V %W') AS week, SUM(fd.amount) as "totalAmount", f.name as "fundName"
+        FROM donations d
+        INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+        INNER JOIN funds f on f.id = fd."fundId" AND f."taxDeductible" = true
+        WHERE d."churchId"=${churchId}
+        AND d."donationDate" BETWEEN ${sDate} AND ${eDate}
+        GROUP BY year(d."donationDate"), week(d."donationDate", 0), f.name
+        ORDER BY year(d."donationDate"), week(d."donationDate", 0), f.name
+      `.execute(this.db);
     return result.rows;
   }
 
   public async loadPersonBasedSummary(churchId: string, startDate: Date, endDate: Date) {
     const result = await sql`
-      SELECT d.personId, d.amount as donationAmount, fd.fundId, fd.amount as fundAmount, f.name as fundName
+      SELECT d."personId", d.amount as "donationAmount", fd."fundId", fd.amount as "fundAmount", f.name as "fundName"
       FROM donations d
-      INNER JOIN fundDonations fd on fd.donationId = d.id
-      INNER JOIN funds f on f.id = fd.fundId AND f.taxDeductible = 1
-      WHERE d.churchId=${churchId}
-      AND d.donationDate BETWEEN ${DateHelper.toMysqlDate(startDate)} AND ${DateHelper.toMysqlDate(endDate)}
+      INNER JOIN "fundDonations" fd on fd."donationId" = d.id
+      INNER JOIN funds f on f.id = fd."fundId" AND f."taxDeductible" = true
+      WHERE d."churchId"=${churchId}
+      AND d."donationDate" BETWEEN ${DateHelper.toMysqlDate(startDate)} AND ${DateHelper.toMysqlDate(endDate)}
     `.execute(this.db);
     return result.rows;
   }

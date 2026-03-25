@@ -30,7 +30,7 @@ export class PositionRepo extends KyselyRepo {
 
   public async loadSignupByPlanId(churchId: string, planId: string) {
     return this.db.selectFrom("positions").selectAll()
-      .where("churchId", "=", churchId).where("planId", "=", planId).where("allowSelfSignup", "=", 1 as any)
+      .where("churchId", "=", churchId).where("planId", "=", planId).where("allowSelfSignup", "=", true as any)
       .orderBy("categoryName").orderBy("name").execute();
   }
 

@@ -11,8 +11,8 @@ export class ConditionRepo extends KyselyRepo {
   public async loadForAutomation(churchId: string, automationId: string) {
     const result = await sql`
       SELECT * FROM conditions
-      WHERE conjunctionId IN (SELECT id FROM conjunctions WHERE automationId=${automationId})
-      AND churchId=${churchId}
+      WHERE "conjunctionId" IN (SELECT id FROM conjunctions WHERE "automationId"=${automationId})
+      AND "churchId"=${churchId}
     `.execute(this.db);
     return result.rows;
   }

@@ -10,12 +10,12 @@ export class GroupServiceTimeRepo extends KyselyRepo {
 
   public async loadWithServiceNames(churchId: string, groupId: string) {
     const result = await sql`
-      SELECT gst.*, concat(c.name, ' - ', s.name, ' - ', st.name) as serviceTimeName
-      FROM groupServiceTimes gst
-      INNER JOIN serviceTimes st on st.id = gst.serviceTimeId
-      INNER JOIN services s on s.id = st.serviceId
-      INNER JOIN campuses c on c.id = s.campusId
-      WHERE gst.churchId=${churchId} AND gst.groupId=${groupId}
+      SELECT gst.*, concat(c.name, ' - ', s.name, ' - ', st.name) as "serviceTimeName"
+      FROM "groupServiceTimes" gst
+      INNER JOIN "serviceTimes" st on st.id = gst."serviceTimeId"
+      INNER JOIN services s on s.id = st."serviceId"
+      INNER JOIN campuses c on c.id = s."campusId"
+      WHERE gst."churchId"=${churchId} AND gst."groupId"=${groupId}
     `.execute(this.db);
     return result.rows;
   }

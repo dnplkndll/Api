@@ -16,7 +16,7 @@ export class PrivateMessageRepo extends KyselyRepo {
   }
 
   public async loadByPersonId(churchId: string, personId: string) {
-    const result = await sql`SELECT c.*, pm.id as pmId, pm.fromPersonId, pm.toPersonId, pm.notifyPersonId, pm.deliveryMethod, m.timeSent as lastMessageTime FROM privateMessages pm INNER JOIN conversations c on c.id=pm.conversationId LEFT JOIN messages m on m.id=c.lastPostId WHERE pm.churchId=${churchId} AND (pm.fromPersonId=${personId} OR pm.toPersonId=${personId}) ORDER BY COALESCE(m.timeSent, c.dateCreated) DESC`.execute(this.db);
+    const result = await sql`SELECT c.*, pm.id as "pmId", pm."fromPersonId", pm."toPersonId", pm."notifyPersonId", pm."deliveryMethod", m."timeSent" as "lastMessageTime" FROM "privateMessages" pm INNER JOIN conversations c on c.id=pm."conversationId" LEFT JOIN messages m on m.id=c."lastPostId" WHERE pm."churchId"=${churchId} AND (pm."fromPersonId"=${personId} OR pm."toPersonId"=${personId}) ORDER BY COALESCE(m."timeSent", c."dateCreated") DESC`.execute(this.db);
     return (result.rows as any[]).map((data: any) => this.rowToPrivateMessage(data));
   }
 

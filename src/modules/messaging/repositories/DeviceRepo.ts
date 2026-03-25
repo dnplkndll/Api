@@ -16,7 +16,7 @@ export class DeviceRepo extends KyselyRepo {
         .where("id", "=", model.id).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO devices (id, appName, deviceId, churchId, personId, fcmToken, label, registrationDate, lastActiveDate, deviceInfo, admId, pairingCode, ipAddress, contentType, contentId) VALUES (${model.id}, ${model.appName}, ${model.deviceId}, ${model.churchId}, ${model.personId}, ${model.fcmToken}, ${model.label}, NOW(), ${model.lastActiveDate}, ${model.deviceInfo}, ${model.admId}, ${model.pairingCode}, ${model.ipAddress}, ${model.contentType}, ${model.contentId})`.execute(this.db);
+      await sql`INSERT INTO devices (id, "appName", "deviceId", "churchId", "personId", "fcmToken", label, "registrationDate", "lastActiveDate", "deviceInfo", "admId", "pairingCode", "ipAddress", "contentType", "contentId") VALUES (${model.id}, ${model.appName}, ${model.deviceId}, ${model.churchId}, ${model.personId}, ${model.fcmToken}, ${model.label}, NOW(), ${model.lastActiveDate}, ${model.deviceInfo}, ${model.admId}, ${model.pairingCode}, ${model.ipAddress}, ${model.contentType}, ${model.contentId})`.execute(this.db);
     }
     return model;
   }

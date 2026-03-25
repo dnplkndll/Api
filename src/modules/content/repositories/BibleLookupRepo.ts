@@ -19,7 +19,7 @@ export class BibleLookupRepo extends GlobalKyselyRepo {
       }).where("id", "=", model.id).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO bibleLookups (id, translationKey, lookupTime, ipAddress, startVerseKey, endVerseKey) VALUES (${model.id}, ${model.translationKey}, now(), ${model.ipAddress}, ${model.startVerseKey}, ${model.endVerseKey})`.execute(this.db);
+      await sql`INSERT INTO "bibleLookups" (id, "translationKey", "lookupTime", "ipAddress", "startVerseKey", "endVerseKey") VALUES (${model.id}, ${model.translationKey}, now(), ${model.ipAddress}, ${model.startVerseKey}, ${model.endVerseKey})`.execute(this.db);
     }
     return model;
   }
@@ -33,7 +33,7 @@ export class BibleLookupRepo extends GlobalKyselyRepo {
   }
 
   public async getStats(startDate: Date, endDate: Date) {
-    const result = await sql`SELECT bt.abbreviation, count(distinct(bl.ipAddress)) as lookups FROM bibleTranslations bt INNER JOIN bibleLookups bl ON bl.translationKey = bt.abbreviation WHERE bl.lookupTime BETWEEN ${startDate} AND ${endDate} GROUP BY bt.abbreviation ORDER BY bt.abbreviation`.execute(this.db);
+    const result = await sql`SELECT bt.abbreviation, count(distinct(bl."ipAddress")) as lookups FROM "bibleTranslations" bt INNER JOIN "bibleLookups" bl ON bl."translationKey" = bt.abbreviation WHERE bl."lookupTime" BETWEEN ${startDate} AND ${endDate} GROUP BY bt.abbreviation ORDER BY bt.abbreviation`.execute(this.db);
     return result.rows as any[];
   }
 }

@@ -1,6 +1,7 @@
 import { injectable } from "inversify";
 import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 export interface AuditLogFilter {
   category?: string;
@@ -26,7 +27,7 @@ export class AuditLogRepo extends KyselyRepo {
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO auditLogs (id, churchId, userId, category, action, entityType, entityId, details, ipAddress, created) VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.category}, ${model.action}, ${model.entityType}, ${model.entityId}, ${model.details}, ${model.ipAddress}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "auditLogs" (id, "churchId", "userId", category, action, "entityType", "entityId", details, "ipAddress", created) VALUES (${model.id}, ${model.churchId}, ${model.userId}, ${model.category}, ${model.action}, ${model.entityType}, ${model.entityId}, ${model.details}, ${model.ipAddress}, NOW())`.execute(this.db);
     }
     return model;
   }
@@ -55,8 +56,8 @@ export class AuditLogRepo extends KyselyRepo {
   public async loadForPerson(churchId: string, personId: string, limit: number = 100, offset: number = 0): Promise<any[]> {
     const safeLimit = Math.max(1, Math.min(limit, 1000));
     const safeOffset = Math.max(0, offset);
-    const result = await sql`SELECT al.* FROM auditLogs al
-      WHERE al.churchId=${churchId} AND (al.userId=${personId} OR (al.entityType='person' AND al.entityId=${personId}))
+    const result = await sql`SELECT al.* FROM "auditLogs" al
+      WHERE al."churchId"=${churchId} AND (al."userId"=${personId} OR (al."entityType"='person' AND al."entityId"=${personId}))
       ORDER BY al.created DESC LIMIT ${sql.lit(safeLimit)} OFFSET ${sql.lit(safeOffset)}`.execute(this.db);
     return result.rows as any[];
   }
@@ -78,6 +79,9 @@ export class AuditLogRepo extends KyselyRepo {
   }
 
   public async deleteOld(days: number = 365): Promise<void> {
-    await sql`DELETE FROM auditLogs WHERE created < DATE_SUB(NOW(), INTERVAL ${sql.lit(days)} DAY)`.execute(this.db);
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '${sql.lit(days)} days'`
+      : sql`DATE_SUB(NOW(), INTERVAL ${sql.lit(days)} DAY)`;
+    await sql`DELETE FROM "auditLogs" WHERE created < ${dateSub}`.execute(this.db);
   }
 }

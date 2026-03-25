@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { DateHelper, UniqueIdHelper } from "@churchapps/apihelper";
 import { sql } from "kysely";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class StreamingServiceRepo extends KyselyRepo {
@@ -46,12 +47,16 @@ export class StreamingServiceRepo extends KyselyRepo {
 
   public async loadAllRecurring() {
     return this.db.selectFrom("streamingServices").selectAll()
-      .where("recurring", "=", 1)
+      .where("recurring", "=", true as any)
       .orderBy("serviceTime")
       .execute();
   }
 
   public async advanceRecurringServices() {
-    await sql`UPDATE streamingServices SET serviceTime = DATE_ADD(serviceTime, INTERVAL CEIL(TIMESTAMPDIFF(DAY, serviceTime, DATE_ADD(NOW(), INTERVAL 6 HOUR)) / 7) * 7 DAY) WHERE recurring = 1 AND serviceTime < DATE_SUB(NOW(), INTERVAL 6 HOUR)`.execute(this.db);
+    if (getDialect() === "postgres") {
+      await sql`UPDATE "streamingServices" SET "serviceTime" = "serviceTime" + (CEIL(EXTRACT(EPOCH FROM (NOW() + INTERVAL '6 hours' - "serviceTime")) / 86400 / 7) * 7) * INTERVAL '1 day' WHERE recurring = true AND "serviceTime" < NOW() - INTERVAL '6 hours'`.execute(this.db);
+    } else {
+      await sql`UPDATE "streamingServices" SET "serviceTime" = DATE_ADD("serviceTime", INTERVAL CEIL(TIMESTAMPDIFF(DAY, "serviceTime", DATE_ADD(NOW(), INTERVAL 6 HOUR)) / 7) * 7 DAY) WHERE recurring = true AND "serviceTime" < DATE_SUB(NOW(), INTERVAL 6 HOUR)`.execute(this.db);
+    }
   }
 }

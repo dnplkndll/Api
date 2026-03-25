@@ -17,47 +17,47 @@ export class GroupMemberRepo extends KyselyRepo {
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO groupMembers (id, churchId, groupId, personId, leader, joinDate) VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.personId}, ${model.leader}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "groupMembers" (id, "churchId", "groupId", "personId", leader, "joinDate") VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.personId}, ${model.leader}, NOW())`.execute(this.db);
     }
     return model;
   }
 
   public async loadForGroup(churchId: string, groupId: string) {
     const result = await sql`SELECT gm.*,
-      p.photoUpdated, p.displayName, p.email, p.homePhone, p.mobilePhone, p.workPhone, p.optedOut,
+      p."photoUpdated", p."displayName", p.email, p."homePhone", p."mobilePhone", p."workPhone", p."optedOut",
       p.address1, p.address2, p.city, p.state, p.zip,
-      p.householdId, p.householdRole
-      FROM groupMembers gm
-      INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE gm.churchId=${churchId} AND gm.groupId=${groupId}
-      ORDER BY gm.leader DESC, p.lastName, p.firstName`.execute(this.db);
+      p."householdId", p."householdRole"
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId"=${groupId}
+      ORDER BY gm.leader DESC, p."lastName", p."firstName"`.execute(this.db);
     return result.rows;
   }
 
   public async loadLeadersForGroup(churchId: string, groupId: string) {
-    const result = await sql`SELECT gm.*, p.photoUpdated, p.displayName
-      FROM groupMembers gm
-      INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE gm.churchId=${churchId} AND gm.groupId=${groupId} and gm.leader=1
-      ORDER BY p.lastName, p.firstName`.execute(this.db);
+    const result = await sql`SELECT gm.*, p."photoUpdated", p."displayName"
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId"=${groupId} and gm.leader=true
+      ORDER BY p."lastName", p."firstName"`.execute(this.db);
     return result.rows;
   }
 
   public async loadForGroups(churchId: string, groupIds: string[]) {
     if (groupIds.length === 0) return [];
-    const result = await sql`SELECT gm.*, p.photoUpdated, p.displayName, p.email
-      FROM groupMembers gm
-      INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE gm.churchId=${churchId} AND gm.groupId IN (${sql.join(groupIds)})
-      ORDER BY gm.leader desc, p.lastName, p.firstName`.execute(this.db);
+    const result = await sql`SELECT gm.*, p."photoUpdated", p."displayName", p.email
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId" IN (${sql.join(groupIds)})
+      ORDER BY gm.leader desc, p."lastName", p."firstName"`.execute(this.db);
     return result.rows;
   }
 
   public async loadForPerson(churchId: string, personId: string) {
-    const result = await sql`SELECT gm.*, g.name as groupName
-      FROM groupMembers gm
-      INNER JOIN \`groups\` g on g.Id=gm.groupId
-      WHERE gm.churchId=${churchId} AND gm.personId=${personId} AND g.removed=0
+    const result = await sql`SELECT gm.*, g.name as "groupName"
+      FROM "groupMembers" gm
+      INNER JOIN "groups" g on g.id=gm."groupId"
+      WHERE gm."churchId"=${churchId} AND gm."personId"=${personId} AND g.removed=false
       ORDER BY g.name`.execute(this.db);
     return result.rows;
   }
@@ -65,9 +65,9 @@ export class GroupMemberRepo extends KyselyRepo {
   public async loadForPeople(peopleIds: string[]) {
     if (peopleIds.length === 0) return [];
     const result = await sql`SELECT gm.*, g.name, g.tags
-      FROM groupMembers gm
-      INNER JOIN \`groups\` g on g.Id=gm.groupId
-      WHERE gm.personId IN (${sql.join(peopleIds)})`.execute(this.db);
+      FROM "groupMembers" gm
+      INNER JOIN "groups" g on g.id=gm."groupId"
+      WHERE gm."personId" IN (${sql.join(peopleIds)})`.execute(this.db);
     return result.rows;
   }
 

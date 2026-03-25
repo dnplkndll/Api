@@ -15,13 +15,13 @@ export class RoleMemberRepo extends KyselyRepo {
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO roleMembers (id, churchId, roleId, userId, addedBy, dateAdded) VALUES (${model.id}, ${model.churchId}, ${model.roleId}, ${model.userId}, ${model.addedBy}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "roleMembers" (id, "churchId", "roleId", "userId", "addedBy", "dateAdded") VALUES (${model.id}, ${model.churchId}, ${model.roleId}, ${model.userId}, ${model.addedBy}, NOW())`.execute(this.db);
     }
     return model;
   }
 
   public async loadByRoleId(roleId: string, churchId: string): Promise<any[]> {
-    const result = await sql`SELECT rm.*, uc.personId FROM roleMembers rm LEFT JOIN userChurches uc ON rm.userId=uc.userId AND rm.churchId=uc.churchId WHERE roleId=${roleId} AND rm.churchId=${churchId} ORDER BY rm.dateAdded`.execute(this.db);
+    const result = await sql`SELECT rm.*, uc."personId" FROM "roleMembers" rm LEFT JOIN "userChurches" uc ON rm."userId"=uc."userId" AND rm."churchId"=uc."churchId" WHERE "roleId"=${roleId} AND rm."churchId"=${churchId} ORDER BY rm."dateAdded"`.execute(this.db);
     return result.rows as any[];
   }
 

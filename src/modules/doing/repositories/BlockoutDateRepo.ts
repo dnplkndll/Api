@@ -31,7 +31,7 @@ export class BlockoutDateRepo extends KyselyRepo {
   }
 
   public async loadUpcoming(churchId: string) {
-    const result = await sql`SELECT * FROM blockoutDates WHERE churchId=${churchId} AND endDate>NOW()`.execute(this.db);
+    const result = await sql`SELECT * FROM "blockoutDates" WHERE "churchId"=${churchId} AND "endDate">NOW()`.execute(this.db);
     return result.rows;
   }
 

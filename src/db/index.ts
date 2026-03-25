@@ -33,26 +33,32 @@ export function getDb(moduleName: string): Kysely<any> {
         })
       });
     } else {
+      const pool = createPool({
+        host: dbConfig.host,
+        port: dbConfig.port || 3306,
+        user: dbConfig.user,
+        password: dbConfig.password,
+        database: dbConfig.database,
+        connectionLimit: dbConfig.connectionLimit || 10,
+        charset: "utf8mb4",
+        // MySQL stores booleans as BIT(1); convert to JS booleans at the driver level.
+        // PostgreSQL uses native boolean — no typeCast needed.
+        typeCast(field: any, next: () => unknown) {
+          if (field.type === "BIT" && field.length === 1) {
+            const bytes = field.buffer();
+            return bytes ? bytes[0] === 1 : null;
+          }
+          return next();
+        }
+      });
       db = new Kysely<any>({
         dialect: new MysqlDialect({
-          pool: createPool({
-            host: dbConfig.host,
-            port: dbConfig.port || 3306,
-            user: dbConfig.user,
-            password: dbConfig.password,
-            database: dbConfig.database,
-            connectionLimit: dbConfig.connectionLimit || 10,
-            charset: "utf8mb4",
-            // MySQL stores booleans as BIT(1); convert to JS booleans at the driver level.
-            // PostgreSQL uses native boolean — no typeCast needed.
-            typeCast(field: any, next: () => unknown) {
-              if (field.type === "BIT" && field.length === 1) {
-                const bytes = field.buffer();
-                return bytes ? bytes[0] === 1 : null;
-              }
-              return next();
-            }
-          })
+          pool,
+          async onCreateConnection(connection) {
+            // Enable ANSI_QUOTES so double-quoted identifiers work on MySQL,
+            // matching PostgreSQL behavior for cross-dialect SQL compatibility.
+            await connection.executeQuery({ sql: "SET SESSION sql_mode = CONCAT(@@sql_mode, ',ANSI_QUOTES')", parameters: [] } as any);
+          }
         })
       });
     }

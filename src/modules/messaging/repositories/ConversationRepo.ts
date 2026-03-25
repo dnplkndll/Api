@@ -2,6 +2,7 @@ import { sql } from "kysely";
 import { UniqueIdHelper } from "@churchapps/apihelper";
 import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import { injectable } from "inversify";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class ConversationRepo extends KyselyRepo {
@@ -20,13 +21,17 @@ export class ConversationRepo extends KyselyRepo {
       }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO conversations (id, churchId, contentType, contentId, title, groupId, visibility, allowAnonymousPosts, dateCreated, postCount) VALUES (${model.id}, ${model.churchId}, ${model.contentType}, ${model.contentId}, ${model.title}, ${model.groupId}, ${model.visibility}, ${model.allowAnonymousPosts}, NOW(), 0)`.execute(this.db);
+      await sql`INSERT INTO conversations (id, "churchId", "contentType", "contentId", title, "groupId", visibility, "allowAnonymousPosts", "dateCreated", "postCount") VALUES (${model.id}, ${model.churchId}, ${model.contentType}, ${model.contentId}, ${model.title}, ${model.groupId}, ${model.visibility}, ${model.allowAnonymousPosts}, NOW(), 0)`.execute(this.db);
     }
     return model;
   }
 
   private async cleanup() {
-    await sql`CALL cleanup()`.execute(this.db);
+    if (getDialect() === "postgres") {
+      await sql`SELECT cleanup()`.execute(this.db);
+    } else {
+      await sql`CALL cleanup()`.execute(this.db);
+    }
   }
 
   public async loadByIds(churchId: string, ids: string[]) {
@@ -39,7 +44,10 @@ export class ConversationRepo extends KyselyRepo {
   }
 
   public async loadPosts(churchId: string, groupIds: string[]) {
-    const result = await sql`select c.contentType, c.contentId, c.groupId, c.id, c.firstPostId, c.lastPostId, c.postCount FROM conversations c INNER JOIN messages fp on fp.id=c.firstPostId INNER JOIN messages lp on lp.id=c.lastPostId WHERE c.churchId=${churchId} and c.groupId IN (${sql.join(groupIds)}) AND lp.timeSent>DATE_SUB(NOW(), INTERVAL 365 DAY)`.execute(this.db);
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '365 days'`
+      : sql`DATE_SUB(NOW(), INTERVAL 365 DAY)`;
+    const result = await sql`select c."contentType", c."contentId", c."groupId", c.id, c."firstPostId", c."lastPostId", c."postCount" FROM conversations c INNER JOIN messages fp on fp.id=c."firstPostId" INNER JOIN messages lp on lp.id=c."lastPostId" WHERE c."churchId"=${churchId} and c."groupId" IN (${sql.join(groupIds)}) AND lp."timeSent">${dateSub}`.execute(this.db);
     return (result.rows as any[]) || [];
   }
 
@@ -73,12 +81,16 @@ export class ConversationRepo extends KyselyRepo {
   }
 
   public async loadHostConversation(churchId: string, mainConversationId: string) {
-    const result = await sql`select c2.* FROM conversations c INNER JOIN conversations c2 on c2.churchId=c.churchId and c2.contentType='streamingLiveHost' and c2.contentId=c.contentId WHERE c.id=${mainConversationId} AND c.churchId=${churchId} LIMIT 1`.execute(this.db);
+    const result = await sql`select c2.* FROM conversations c INNER JOIN conversations c2 on c2."churchId"=c."churchId" and c2."contentType"='streamingLiveHost' and c2."contentId"=c."contentId" WHERE c.id=${mainConversationId} AND c."churchId"=${churchId} LIMIT 1`.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
 
   public async updateStats(conversationId: string) {
-    await sql`CALL updateConversationStats(${conversationId})`.execute(this.db);
+    if (getDialect() === "postgres") {
+      await sql`SELECT updateConversationStats(${conversationId})`.execute(this.db);
+    } else {
+      await sql`CALL updateConversationStats(${conversationId})`.execute(this.db);
+    }
   }
 
   public convertToModel(_churchId: string, data: any) {

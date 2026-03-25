@@ -18,7 +18,7 @@ export class SentTextRepo extends KyselyRepo {
       }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO sentTexts (id, churchId, groupId, recipientPersonId, senderPersonId, message, recipientCount, successCount, failCount, timeSent) VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.recipientPersonId}, ${model.senderPersonId}, ${model.message}, ${model.recipientCount}, ${model.successCount}, ${model.failCount}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "sentTexts" (id, "churchId", "groupId", "recipientPersonId", "senderPersonId", message, "recipientCount", "successCount", "failCount", "timeSent") VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.recipientPersonId}, ${model.senderPersonId}, ${model.message}, ${model.recipientCount}, ${model.successCount}, ${model.failCount}, NOW())`.execute(this.db);
     }
     return model;
   }

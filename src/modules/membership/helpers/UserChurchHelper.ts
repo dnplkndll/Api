@@ -35,14 +35,14 @@ export class UserChurchHelper {
     // in non-archived churches, excluding churches where a userChurch already exists.
     const db = getDb("membership");
     const result = await sql`
-      SELECT p.id as personId, p.churchId
+      SELECT p.id as "personId", p."churchId"
       FROM people p
-      INNER JOIN churches c ON c.id = p.churchId AND c.archivedDate IS NULL
-      INNER JOIN groupMembers gm ON gm.personId = p.id AND gm.churchId = p.churchId
-      INNER JOIN ${sql.table("groups")} g ON g.id = gm.groupId AND g.removed = 0
-      LEFT JOIN userChurches uc ON uc.userId = ${userId} AND uc.churchId = p.churchId
-      WHERE LOWER(p.email) = LOWER(${email}) AND p.removed = 0 AND uc.id IS NULL
-      GROUP BY p.churchId, p.id
+      INNER JOIN churches c ON c.id = p."churchId" AND c."archivedDate" IS NULL
+      INNER JOIN "groupMembers" gm ON gm."personId" = p.id AND gm."churchId" = p."churchId"
+      INNER JOIN ${sql.table("groups")} g ON g.id = gm."groupId" AND g.removed = false
+      LEFT JOIN "userChurches" uc ON uc."userId" = ${userId} AND uc."churchId" = p."churchId"
+      WHERE LOWER(p.email) = LOWER(${email}) AND p.removed = false AND uc.id IS NULL
+      GROUP BY p."churchId", p.id
     `.execute(db);
     const matches = result.rows as Array<{ personId: string; churchId: string }>;
 

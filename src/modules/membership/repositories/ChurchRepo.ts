@@ -2,6 +2,7 @@ import { injectable } from "inversify";
 import { sql } from "kysely";
 import { Church, Api, LoginUserChurch } from "../models/index.js";
 import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
 export class ChurchRepo extends GlobalKyselyRepo {
@@ -10,10 +11,10 @@ export class ChurchRepo extends GlobalKyselyRepo {
 
   public async save(model: any) {
     if (model.id) {
-      await sql`UPDATE churches SET name=${model.name}, subDomain=${model.subDomain}, address1=${model.address1}, address2=${model.address2}, city=${model.city}, state=${model.state}, zip=${model.zip}, country=${model.country}, archivedDate=${model.archivedDate}, latitude=${model.latitude}, longitude=${model.longitude} WHERE id=${model.id}`.execute(this.db);
+      await sql`UPDATE churches SET name=${model.name}, "subDomain"=${model.subDomain}, address1=${model.address1}, address2=${model.address2}, city=${model.city}, state=${model.state}, zip=${model.zip}, country=${model.country}, "archivedDate"=${model.archivedDate}, latitude=${model.latitude}, longitude=${model.longitude} WHERE id=${model.id}`.execute(this.db);
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO churches (id, name, subDomain, registrationDate, address1, address2, city, state, zip, country, archivedDate, latitude, longitude) VALUES (${model.id}, ${model.name}, ${model.subDomain}, NOW(), ${model.address1}, ${model.address2}, ${model.city}, ${model.state}, ${model.zip}, ${model.country}, ${model.archivedDate}, ${model.latitude}, ${model.longitude})`.execute(this.db);
+      await sql`INSERT INTO churches (id, name, "subDomain", "registrationDate", address1, address2, city, state, zip, country, "archivedDate", latitude, longitude) VALUES (${model.id}, ${model.name}, ${model.subDomain}, NOW(), ${model.address1}, ${model.address2}, ${model.city}, ${model.state}, ${model.zip}, ${model.country}, ${model.archivedDate}, ${model.latitude}, ${model.longitude})`.execute(this.db);
     }
     return model;
   }
@@ -77,10 +78,10 @@ export class ChurchRepo extends GlobalKyselyRepo {
   }
 
   public async loadForUser(userId: string) {
-    const result = await sql`select c.*, p.id as personId, p.membershipStatus from userChurches uc
-      inner join churches c on c.id=uc.churchId and c.archivedDate IS NULL
-      LEFT JOIN people p on p.id=uc.personId AND (p.removed=0 OR p.removed IS NULL)
-      where uc.userId=${userId}`.execute(this.db);
+    const result = await sql`select c.*, p.id as "personId", p."membershipStatus" from "userChurches" uc
+      inner join churches c on c.id=uc."churchId" and c."archivedDate" IS NULL
+      LEFT JOIN people p on p.id=uc."personId" AND (p.removed=false OR p.removed IS NULL)
+      where uc."userId"=${userId}`.execute(this.db);
     const rows = result.rows as any[];
     const resultArr: LoginUserChurch[] = [];
     rows.forEach((row: any) => {
@@ -110,12 +111,22 @@ export class ChurchRepo extends GlobalKyselyRepo {
   }
 
   public async getAbandoned(noMonths = 6) {
-    const result = await sql`SELECT churchId FROM (SELECT churchId, MAX(lastAccessed) lastAccessed FROM userChurches GROUP BY churchId) groupedChurches WHERE lastAccessed <= DATE_SUB(NOW(), INTERVAL ${sql.lit(noMonths)} MONTH)`.execute(this.db);
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '${sql.lit(noMonths)} months'`
+      : sql`DATE_SUB(NOW(), INTERVAL ${sql.lit(noMonths)} MONTH)`;
+    const result = await sql`SELECT "churchId" FROM (SELECT "churchId", MAX("lastAccessed") "lastAccessed" FROM "userChurches" GROUP BY "churchId") "groupedChurches" WHERE "lastAccessed" <= ${dateSub}`.execute(this.db);
     return result.rows;
   }
 
   public async deleteAbandoned(noMonths = 7) {
-    await sql`DELETE churches FROM churches LEFT JOIN (SELECT churchId, MAX(lastAccessed) lastAccessed FROM userChurches GROUP BY churchId) groupedChurches ON churches.id = groupedChurches.churchId WHERE groupedChurches.lastAccessed <= DATE_SUB(NOW(), INTERVAL ${sql.lit(noMonths)} MONTH)`.execute(this.db);
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '${sql.lit(noMonths)} months'`
+      : sql`DATE_SUB(NOW(), INTERVAL ${sql.lit(noMonths)} MONTH)`;
+    if (getDialect() === "postgres") {
+      await sql`DELETE FROM churches WHERE id IN (SELECT churches.id FROM churches LEFT JOIN (SELECT "churchId", MAX("lastAccessed") "lastAccessed" FROM "userChurches" GROUP BY "churchId") "groupedChurches" ON churches.id = "groupedChurches"."churchId" WHERE "groupedChurches"."lastAccessed" <= ${dateSub})`.execute(this.db);
+    } else {
+      await sql`DELETE churches FROM churches LEFT JOIN (SELECT "churchId", MAX("lastAccessed") "lastAccessed" FROM "userChurches" GROUP BY "churchId") "groupedChurches" ON churches.id = "groupedChurches"."churchId" WHERE "groupedChurches"."lastAccessed" <= ${dateSub}`.execute(this.db);
+    }
   }
 
   // For compatibility with existing controllers

@@ -18,7 +18,7 @@ export class OAuthClientRepo extends GlobalKyselyRepo {
       } as any).where("id", "=", model.id).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO oAuthClients (id, name, clientId, clientSecret, redirectUris, scopes, createdAt) VALUES (${model.id}, ${model.name}, ${model.clientId}, ${model.clientSecret}, ${model.redirectUris}, ${model.scopes}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "oAuthClients" (id, name, "clientId", "clientSecret", "redirectUris", scopes, "createdAt") VALUES (${model.id}, ${model.name}, ${model.clientId}, ${model.clientSecret}, ${model.redirectUris}, ${model.scopes}, NOW())`.execute(this.db);
     }
     return model;
   }

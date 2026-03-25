@@ -45,7 +45,7 @@ abstract class BaseKyselyRepo {
  *
  * Set `protected readonly softDelete = true` in subclasses whose table has a
  * `removed` column. When enabled:
- *   - `delete()` sets `removed = 1` instead of deleting the row.
+ *   - `delete()` sets `removed = true` instead of deleting the row.
  *   - `load()`, `loadOne()`, and `loadAll()` automatically exclude removed rows.
  */
 export abstract class KyselyRepo extends BaseKyselyRepo {
@@ -59,7 +59,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
         .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = this.createId();
-      const values = this.softDelete ? { ...model, removed: 0 } : model;
+      const values = this.softDelete ? { ...model, removed: false } : model;
       await this.db.insertInto(this.tableName).values(values).execute();
     }
     return model;
@@ -67,7 +67,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
 
   public async delete(churchId: string, id: string) {
     if (this.softDelete) {
-      await this.db.updateTable(this.tableName).set({ removed: 1 } as any)
+      await this.db.updateTable(this.tableName).set({ removed: true } as any)
         .where("id", "=", id).where("churchId", "=", churchId).execute();
     } else {
       await this.db.deleteFrom(this.tableName)
@@ -78,7 +78,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
   public async loadOne(churchId: string, id: string, includeRemoved = false): Promise<any> {
     let q = this.db.selectFrom(this.tableName).selectAll()
       .where("id", "=", id).where("churchId", "=", churchId);
-    if (this.softDelete && !includeRemoved) q = q.where("removed", "=", 0);
+    if (this.softDelete && !includeRemoved) q = q.where("removed", "=", false as any);
     return await q.executeTakeFirst() ?? null;
   }
 
@@ -89,7 +89,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
   public async loadAll(churchId: string, orderBy?: string): Promise<any[]> {
     let q = this.db.selectFrom(this.tableName).selectAll()
       .where("churchId", "=", churchId);
-    if (this.softDelete) q = q.where("removed", "=", 0);
+    if (this.softDelete) q = q.where("removed", "=", false as any);
     const order = orderBy || this.defaultOrderBy;
     if (order) q = q.orderBy(order as any);
     return await q.execute();
@@ -102,7 +102,7 @@ export abstract class KyselyRepo extends BaseKyselyRepo {
   /** Force-insert a model, bypassing save()'s update-if-id-exists logic. */
   public async insert(model: any) {
     if (!model.id) model.id = this.createId();
-    const values = this.softDelete ? { ...model, removed: 0 } : model;
+    const values = this.softDelete ? { ...model, removed: false } : model;
     await this.db.insertInto(this.tableName).values(values).execute();
     return model;
   }

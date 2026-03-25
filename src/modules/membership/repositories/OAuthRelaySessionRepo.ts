@@ -18,7 +18,7 @@ export class OAuthRelaySessionRepo extends GlobalKyselyRepo {
     } else {
       model.id = this.createId();
       const expiresAt = DateHelper.toMysqlDate(model.expiresAt);
-      await sql`INSERT INTO oAuthRelaySessions (id, sessionCode, provider, redirectUri, status, expiresAt, createdAt)
+      await sql`INSERT INTO "oAuthRelaySessions" (id, "sessionCode", provider, "redirectUri", status, "expiresAt", "createdAt")
                  VALUES (${model.id}, ${model.sessionCode}, ${model.provider}, ${model.redirectUri}, ${model.status || "pending"}, ${expiresAt}, NOW())`.execute(this.db);
     }
     return model;
@@ -30,7 +30,7 @@ export class OAuthRelaySessionRepo extends GlobalKyselyRepo {
   }
 
   public async loadBySessionCode(sessionCode: string) {
-    const result = await sql`SELECT * FROM oAuthRelaySessions WHERE sessionCode=${sessionCode} AND expiresAt > NOW()`.execute(this.db);
+    const result = await sql`SELECT * FROM "oAuthRelaySessions" WHERE "sessionCode"=${sessionCode} AND "expiresAt" > NOW()`.execute(this.db);
     return (result.rows as any[])[0] ?? null;
   }
 
@@ -40,7 +40,7 @@ export class OAuthRelaySessionRepo extends GlobalKyselyRepo {
   }
 
   public async deleteExpired() {
-    await sql`DELETE FROM oAuthRelaySessions WHERE expiresAt < NOW()`.execute(this.db);
+    await sql`DELETE FROM "oAuthRelaySessions" WHERE "expiresAt" < NOW()`.execute(this.db);
   }
 
   // Generate 8-character session code (TV-friendly, no ambiguous characters)

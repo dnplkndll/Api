@@ -18,7 +18,7 @@ export class ConnectionRepo extends KyselyRepo {
     } else {
       model.id = UniqueIdHelper.shortId();
       await this.deleteExisting(model.churchId, model.conversationId, model.socketId, model.id);
-      await sql`INSERT INTO connections (id, churchId, conversationId, personId, displayName, socketId, ipAddress, timeJoined) VALUES (${model.id}, ${model.churchId}, ${model.conversationId}, ${model.personId}, ${model.displayName}, ${model.socketId}, ${model.ipAddress}, NOW())`.execute(this.db);
+      await sql`INSERT INTO connections (id, "churchId", "conversationId", "personId", "displayName", "socketId", "ipAddress", "timeJoined") VALUES (${model.id}, ${model.churchId}, ${model.conversationId}, ${model.personId}, ${model.displayName}, ${model.socketId}, ${model.ipAddress}, NOW())`.execute(this.db);
     }
     return model;
   }

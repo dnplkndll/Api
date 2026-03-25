@@ -19,7 +19,7 @@ export class MessageRepo extends KyselyRepo {
       }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
     } else {
       model.id = UniqueIdHelper.shortId();
-      await sql`INSERT INTO messages (id, churchId, conversationId, personId, displayName, messageType, content, timeSent) VALUES (${model.id}, ${model.churchId}, ${model.conversationId}, ${model.personId}, ${model.displayName}, ${model.messageType}, ${model.content}, NOW())`.execute(this.db);
+      await sql`INSERT INTO messages (id, "churchId", "conversationId", "personId", "displayName", "messageType", content, "timeSent") VALUES (${model.id}, ${model.churchId}, ${model.conversationId}, ${model.personId}, ${model.displayName}, ${model.messageType}, ${model.content}, NOW())`.execute(this.db);
     }
     return model;
   }

@@ -25,16 +25,16 @@ export class RolePermissionRepo extends KyselyRepo {
   }
 
   public async loadForUser(userId: string, removeUniversal: boolean): Promise<LoginUserChurch[]> {
-    const queryResult = await sql`SELECT c.name AS churchName, r.churchId, c.subDomain, rp.apiName, rp.contentType, rp.contentId, rp.action, p.id AS personId, p.membershipStatus, c.archivedDate, c.address1, c.address2, c.city, c.state, c.zip, c.country
-      FROM roleMembers rm
-      INNER JOIN roles r on r.id=rm.roleId
-      INNER JOIN rolePermissions rp on (rp.roleId=r.id or (rp.roleId IS NULL AND rp.churchId=rm.churchId))
-      LEFT JOIN churches c on c.id=r.churchId
-      LEFT JOIN userChurches uc on uc.churchId=r.churchId AND uc.userId = rm.userId
-      LEFT JOIN people p on p.id = uc.personId AND p.churchId=uc.churchId AND (p.removed=0 OR p.removed IS NULL)
-      WHERE rm.userId=${userId}
-      GROUP BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action, p.id, p.membershipStatus, c.archivedDate
-      ORDER BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action, p.id, p.membershipStatus, c.archivedDate`.execute(this.db);
+    const queryResult = await sql`SELECT c.name AS "churchName", r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id AS "personId", p."membershipStatus", c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
+      FROM "roleMembers" rm
+      INNER JOIN roles r on r.id=rm."roleId"
+      INNER JOIN "rolePermissions" rp on (rp."roleId"=r.id or (rp."roleId" IS NULL AND rp."churchId"=rm."churchId"))
+      LEFT JOIN churches c on c.id=r."churchId"
+      LEFT JOIN "userChurches" uc on uc."churchId"=r."churchId" AND uc."userId" = rm."userId"
+      LEFT JOIN people p on p.id = uc."personId" AND p."churchId"=uc."churchId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE rm."userId"=${userId}
+      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id, p."membershipStatus", c."archivedDate"
+      ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id, p."membershipStatus", c."archivedDate"`.execute(this.db);
     const data = queryResult.rows as any[];
 
     const result: LoginUserChurch[] = [];
@@ -86,13 +86,13 @@ export class RolePermissionRepo extends KyselyRepo {
   }
 
   public async loadForChurch(churchId: string, univeralChurch: LoginUserChurch): Promise<LoginUserChurch> {
-    const queryResult = await sql`SELECT c.name AS churchName, r.churchId, c.subDomain, rp.apiName, rp.contentType, rp.contentId, rp.action, c.archivedDate, c.address1, c.address2, c.city, c.state, c.zip, c.country
+    const queryResult = await sql`SELECT c.name AS "churchName", r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
       FROM roles r
-      INNER JOIN rolePermissions rp on rp.roleId=r.id
-      LEFT JOIN churches c on c.id=r.churchId
+      INNER JOIN "rolePermissions" rp on rp."roleId"=r.id
+      LEFT JOIN churches c on c.id=r."churchId"
       WHERE c.id=${churchId}
-      GROUP BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action
-      ORDER BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action`.execute(this.db);
+      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action
+      ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action`.execute(this.db);
     const data = queryResult.rows as any[];
 
     let result: LoginUserChurch = null;
@@ -144,14 +144,14 @@ export class RolePermissionRepo extends KyselyRepo {
   }
 
   public async loadUserPermissionInChurch(userId: string, churchId: string) {
-    const queryResult = await sql`SELECT c.name AS churchName, r.churchId, c.subDomain, rp.apiName, rp.contentType, rp.contentId, rp.action, c.archivedDate, c.address1, c.address2, c.city, c.state, c.zip, c.country
-      FROM roleMembers rm
-      INNER JOIN roles r on r.id=rm.roleId
-      INNER JOIN rolePermissions rp on (rp.roleId=r.id or (rp.roleId IS NULL AND rp.churchId=rm.churchId))
-      LEFT JOIN churches c on c.id=r.churchId
-      WHERE rm.userId=${userId} AND rm.churchId=${churchId}
-      GROUP BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action
-      ORDER BY c.name, r.churchId, rp.apiName, rp.contentType, rp.contentId, rp.action`.execute(this.db);
+    const queryResult = await sql`SELECT c.name AS "churchName", r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
+      FROM "roleMembers" rm
+      INNER JOIN roles r on r.id=rm."roleId"
+      INNER JOIN "rolePermissions" rp on (rp."roleId"=r.id or (rp."roleId" IS NULL AND rp."churchId"=rm."churchId"))
+      LEFT JOIN churches c on c.id=r."churchId"
+      WHERE rm."userId"=${userId} AND rm."churchId"=${churchId}
+      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action
+      ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action`.execute(this.db);
     const data = queryResult.rows as any[];
 
     let result: LoginUserChurch = null;
@@ -221,7 +221,7 @@ export class RolePermissionRepo extends KyselyRepo {
 
   // permissions applied to all the members of church
   public async loadForEveryone(churchId: string) {
-    const result = await sql`SELECT rp.id, rp.churchId, rp.roleId, rp.apiName, rp.contentType, rp.contentId, rp.action, c.name AS churchName, c.subDomain FROM rolePermissions rp LEFT JOIN churches c on c.id=rp.churchId WHERE rp.churchId=${churchId} AND rp.roleId IS NULL`.execute(this.db);
+    const result = await sql`SELECT rp.id, rp."churchId", rp."roleId", rp."apiName", rp."contentType", rp."contentId", rp.action, c.name AS "churchName", c."subDomain" FROM "rolePermissions" rp LEFT JOIN churches c on c.id=rp."churchId" WHERE rp."churchId"=${churchId} AND rp."roleId" IS NULL`.execute(this.db);
     return result.rows;
   }
 }

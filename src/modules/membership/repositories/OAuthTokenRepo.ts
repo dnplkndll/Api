@@ -21,7 +21,7 @@ export class OAuthTokenRepo extends GlobalKyselyRepo {
       } as any).where("id", "=", model.id).execute();
     } else {
       model.id = this.createId();
-      await sql`INSERT INTO oAuthTokens (id, accessToken, refreshToken, clientId, userChurchId, scopes, expiresAt, createdAt) VALUES (${model.id}, ${model.accessToken}, ${model.refreshToken}, ${model.clientId}, ${model.userChurchId}, ${model.scopes}, ${expiresAt}, NOW())`.execute(this.db);
+      await sql`INSERT INTO "oAuthTokens" (id, "accessToken", "refreshToken", "clientId", "userChurchId", scopes, "expiresAt", "createdAt") VALUES (${model.id}, ${model.accessToken}, ${model.refreshToken}, ${model.clientId}, ${model.userChurchId}, ${model.scopes}, ${expiresAt}, NOW())`.execute(this.db);
     }
     return model;
   }
@@ -64,6 +64,6 @@ export class OAuthTokenRepo extends GlobalKyselyRepo {
   }
 
   public async deleteExpired() {
-    await sql`DELETE FROM oAuthTokens WHERE expiresAt < NOW()`.execute(this.db);
+    await sql`DELETE FROM "oAuthTokens" WHERE "expiresAt" < NOW()`.execute(this.db);
   }
 }
