@@ -1,51 +1,61 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ArrayHelper } from "@churchapps/apihelper";
-import { VisitSession } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class VisitSessionRepo extends ConfiguredRepo<VisitSession> {
-  protected get repoConfig(): RepoConfig<VisitSession> {
-    return {
-      tableName: "visitSessions",
-      hasSoftDelete: false,
-      columns: ["visitId", "sessionId"]
-    };
+export class VisitSessionRepo extends KyselyRepo {
+  protected readonly tableName = "visitSessions";
+  protected readonly moduleName = "attendance";
+  protected readonly softDelete = false;
+
+  public async loadByVisitIdSessionId(churchId: string, visitId: string, sessionId: string) {
+    return await this.db.selectFrom("visitSessions").selectAll()
+      .where("churchId", "=", churchId)
+      .where("visitId", "=", visitId)
+      .where("sessionId", "=", sessionId)
+      .limit(1)
+      .executeTakeFirst() ?? null;
   }
 
-  public loadByVisitIdSessionId(churchId: string, visitId: string, sessionId: string) {
-    return TypedDB.queryOne("SELECT * FROM visitSessions WHERE churchId=? AND visitId=? AND sessionId=? LIMIT 1;", [churchId, visitId, sessionId]);
+  public async loadByVisitIds(churchId: string, visitIds: string[]) {
+    return this.db.selectFrom("visitSessions").selectAll()
+      .where("churchId", "=", churchId)
+      .where("visitId", "in", visitIds)
+      .execute();
   }
 
-  public loadByVisitIds(churchId: string, visitIds: string[]) {
-    return TypedDB.query("SELECT * FROM visitSessions WHERE churchId=? AND visitId IN (" + ArrayHelper.fillArray("?", visitIds.length).join(", ") + ");", [churchId].concat(visitIds));
+  public async loadByVisitId(churchId: string, visitId: string) {
+    return this.db.selectFrom("visitSessions").selectAll()
+      .where("churchId", "=", churchId)
+      .where("visitId", "=", visitId)
+      .execute();
   }
 
-  public loadByVisitId(churchId: string, visitId: string) {
-    return TypedDB.query("SELECT * FROM visitSessions WHERE churchId=? AND visitId=?;", [churchId, visitId]);
+  public async loadForSessionPerson(churchId: string, sessionId: string, personId: string) {
+    const result = await sql`
+      SELECT v.*
+      FROM sessions s
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      INNER JOIN visits v on(v."serviceId" = st."serviceId" or v."groupId" = s."groupId") and v."visitDate" = s."sessionDate"
+      WHERE v."churchId"=${churchId} AND s.id = ${sessionId} AND v."personId"=${personId} LIMIT 1
+    `.execute(this.db);
+    return (result.rows as any[])[0] ?? null;
   }
 
-  public loadForSessionPerson(churchId: string, sessionId: string, personId: string) {
-    const sql =
-      "SELECT v.*" +
-      " FROM sessions s" +
-      " LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId" +
-      " INNER JOIN visits v on(v.serviceId = st.serviceId or v.groupId = s.groupId) and v.visitDate = s.sessionDate" +
-      " WHERE v.churchId=? AND s.id = ? AND v.personId=? LIMIT 1";
-    return TypedDB.queryOne(sql, [churchId, sessionId, personId]);
+  public async loadForSession(churchId: string, sessionId: string) {
+    const result = await sql`
+      SELECT vs.*, v."personId"
+      FROM "visitSessions" vs
+      INNER JOIN visits v on v.id = vs."visitId"
+      WHERE vs."churchId"=${churchId} AND vs."sessionId" = ${sessionId}
+    `.execute(this.db);
+    return result.rows;
   }
 
-  public loadForSession(churchId: string, sessionId: string) {
-    const sql = "SELECT vs.*, v.personId FROM" + " visitSessions vs" + " INNER JOIN visits v on v.id = vs.visitId" + " WHERE vs.churchId=? AND vs.sessionId = ?";
-    return TypedDB.query(sql, [churchId, sessionId]);
-  }
-
-  protected rowToModel(row: any): VisitSession {
-    const result: VisitSession = { id: row.id, visitId: row.visitId, sessionId: row.sessionId };
-    if (row.personId !== undefined) {
-      result.visit = { id: result.visitId, personId: row.personId };
+  public convertToModel(_churchId: string, data: any) {
+    const result: any = { id: data.id, visitId: data.visitId, sessionId: data.sessionId };
+    if (data.personId !== undefined) {
+      result.visit = { id: result.visitId, personId: data.personId };
     }
     return result;
   }

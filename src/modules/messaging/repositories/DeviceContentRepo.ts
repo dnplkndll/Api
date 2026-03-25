@@ -1,33 +1,23 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { DeviceContent } from "../models/index.js";
 import { injectable } from "inversify";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class DeviceContentRepo extends ConfiguredRepo<DeviceContent> {
-  protected get repoConfig(): RepoConfig<DeviceContent> {
-    return {
-      tableName: "deviceContent",
-      hasSoftDelete: false,
-      columns: ["deviceId", "contentType", "contentId"]
-    };
-  }
-  public loadByDeviceId(churchId: string, deviceId: string) {
-    return TypedDB.query("SELECT * FROM deviceContent WHERE churchId=? AND deviceId=?", [churchId, deviceId]);
+export class DeviceContentRepo extends KyselyRepo {
+  protected readonly tableName = "deviceContent";
+  protected readonly moduleName = "messaging";
+  protected readonly softDelete = false;
+
+  public async loadByDeviceId(churchId: string, deviceId: string) {
+    return this.db.selectFrom("deviceContent").selectAll()
+      .where("churchId", "=", churchId)
+      .where("deviceId", "=", deviceId)
+      .execute();
   }
 
-  public deleteByDeviceId(churchId: string, deviceId: string) {
-    return TypedDB.query("DELETE FROM deviceContent WHERE deviceId=? AND churchId=?;", [deviceId, churchId]);
-  }
-
-  protected rowToModel(row: any): DeviceContent {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      deviceId: row.deviceId,
-      contentType: row.contentType,
-      contentId: row.contentId
-    };
+  public async deleteByDeviceId(churchId: string, deviceId: string) {
+    await this.db.deleteFrom("deviceContent")
+      .where("deviceId", "=", deviceId)
+      .where("churchId", "=", churchId)
+      .execute();
   }
 }

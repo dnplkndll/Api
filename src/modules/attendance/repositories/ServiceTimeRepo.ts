@@ -1,48 +1,60 @@
 import { injectable } from "inversify";
-import { ConfiguredRepo, type RepoConfig } from "../../../shared/infrastructure/index.js";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ServiceTime } from "../models/index.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class ServiceTimeRepo extends ConfiguredRepo<ServiceTime> {
-  protected get repoConfig(): RepoConfig<ServiceTime> {
-    return {
-      tableName: "serviceTimes",
-      hasSoftDelete: true,
-      defaultOrderBy: "name",
-      columns: ["serviceId", "name"],
-      insertLiterals: { removed: "0" }
-    };
+export class ServiceTimeRepo extends KyselyRepo {
+  protected readonly tableName = "serviceTimes";
+  protected readonly moduleName = "attendance";
+  protected readonly softDelete = true;
+
+  public override async loadAll(churchId: string) {
+    return this.db.selectFrom("serviceTimes").selectAll()
+      .where("churchId", "=", churchId).where("removed", "=", false as any)
+      .orderBy("name").execute();
   }
 
   public async loadNamesWithCampusService(churchId: string) {
-    const result = await TypedDB.query(
-      "SELECT st.*, concat(c.name, ' - ', s.name, ' - ', st.name) as longName FROM serviceTimes st INNER JOIN services s on s.Id=st.serviceId INNER JOIN campuses c on c.Id=s.campusId WHERE s.churchId=? AND st.removed=0 AND s.removed=0 AND c.removed=0 ORDER BY c.name, s.name, st.name;",
-      [churchId]
-    );
-    return this.convertAllToModel(churchId, result);
+    const result = await sql`
+      SELECT st.*, concat(c.name, ' - ', s.name, ' - ', st.name) as "longName"
+      FROM "serviceTimes" st
+      INNER JOIN services s on s.id=st."serviceId"
+      INNER JOIN campuses c on c.id=s."campusId"
+      WHERE s."churchId"=${churchId} AND st.removed=false AND s.removed=false AND c.removed=false
+      ORDER BY c.name, s.name, st.name
+    `.execute(this.db);
+    return this.convertAllToModel(churchId, result.rows as any[]);
   }
 
   public async loadNamesByServiceId(churchId: string, serviceId: string) {
-    const result = await TypedDB.query(
-      "SELECT st.*, concat(c.name, ' - ', s.name, ' - ', st.name) as longName FROM serviceTimes st INNER JOIN services s on s.id=st.serviceId INNER JOIN campuses c on c.id=s.campusId WHERE s.churchId=? AND s.id=? AND st.removed=0 ORDER BY c.name, s.name, st.name",
-      [churchId, serviceId]
-    );
-    return this.convertAllToModel(churchId, result);
+    const result = await sql`
+      SELECT st.*, concat(c.name, ' - ', s.name, ' - ', st.name) as "longName"
+      FROM "serviceTimes" st
+      INNER JOIN services s on s.id=st."serviceId"
+      INNER JOIN campuses c on c.id=s."campusId"
+      WHERE s."churchId"=${churchId} AND s.id=${serviceId} AND st.removed=false
+      ORDER BY c.name, s.name, st.name
+    `.execute(this.db);
+    return this.convertAllToModel(churchId, result.rows as any[]);
   }
 
   public async loadByChurchCampusService(churchId: string, campusId: string, serviceId: string) {
-    const sql =
-      "SELECT st.*" +
-      " FROM serviceTimes st" +
-      " LEFT OUTER JOIN services s on s.id=st.serviceId" +
-      " WHERE st.churchId = ? AND (?=0 OR st.serviceId=?) AND (? = 0 OR s.campusId = ?) AND st.removed=0";
-    const result = await TypedDB.query(sql, [churchId, serviceId, serviceId, campusId, campusId]);
-    return this.convertAllToModel(churchId, result);
+    let q = this.db.selectFrom("serviceTimes as st")
+      .leftJoin("services as s", "s.id", "st.serviceId")
+      .selectAll("st")
+      .where("st.churchId", "=", churchId)
+      .where("st.removed", "=", false as any);
+    if (serviceId && serviceId !== "0") {
+      q = q.where("st.serviceId", "=", serviceId);
+    }
+    if (campusId && campusId !== "0") {
+      q = q.where("s.campusId", "=", campusId);
+    }
+    const rows = await q.execute();
+    return this.convertAllToModel(churchId, rows as any[]);
   }
 
-  protected rowToModel(data: any): ServiceTime {
-    const result: ServiceTime = { id: data.id, serviceId: data.serviceId, name: data.name, longName: data.longName };
-    return result;
+  public convertToModel(_churchId: string, data: any) {
+    return { id: data.id, serviceId: data.serviceId, name: data.name, longName: data.longName };
   }
 }

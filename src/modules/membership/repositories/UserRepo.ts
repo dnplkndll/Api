@@ -1,66 +1,92 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { User } from "../models/index.js";
-import { DateHelper } from "../helpers/index.js";
-import { BaseRepo } from "../../../shared/infrastructure/BaseRepo.js";
 import { injectable } from "inversify";
+import { DateHelper } from "../helpers/index.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class UserRepo extends BaseRepo<User> {
-  protected tableName = "users";
-  protected hasSoftDelete = false;
+export class UserRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "users";
+  protected readonly moduleName = "membership";
 
-  protected async create(user: User): Promise<User> {
-    user.id = this.createId();
-    const sql = "INSERT INTO users (id, email, password, authGuid, firstName, lastName) VALUES (?, ?, ?, ?, ?, ?);";
-    const params = [user.id, user.email, user.password, user.authGuid, user.firstName, user.lastName];
-    await TypedDB.query(sql, params);
-    return user;
+  public async save(model: any) {
+    if (model.id) {
+      const registrationDate = DateHelper.toMysqlDate(model.registrationDate);
+      const lastLogin = DateHelper.toMysqlDate(model.lastLogin);
+      await this.db.updateTable(this.tableName).set({
+        email: model.email,
+        password: model.password,
+        authGuid: model.authGuid,
+        firstName: model.firstName,
+        lastName: model.lastName,
+        registrationDate,
+        lastLogin
+      } as any).where("id", "=", model.id).execute();
+    } else {
+      model.id = this.createId();
+      await this.db.insertInto(this.tableName).values({
+        id: model.id,
+        email: model.email,
+        password: model.password,
+        authGuid: model.authGuid,
+        firstName: model.firstName,
+        lastName: model.lastName
+      }).execute();
+    }
+    return model;
   }
 
-  protected async update(user: User): Promise<User> {
-    const registrationDate = DateHelper.toMysqlDate(user.registrationDate);
-    const lastLogin = DateHelper.toMysqlDate(user.lastLogin);
-    const sql = "UPDATE users SET email=?, password=?, authGuid=?, firstName=?, lastName=?, registrationDate=?, lastLogin=? WHERE id=?;";
-    const params = [
-      user.email, user.password, user.authGuid, user.firstName, user.lastName, registrationDate, lastLogin, user.id
-    ];
-    await TypedDB.query(sql, params);
-    return user;
+  public async load(id: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "=", id).executeTakeFirst() ?? null;
   }
 
-  public load(id: string): Promise<User> {
-    return TypedDB.queryOne("SELECT * FROM users WHERE id=?", [id]) as Promise<User>;
+  public async loadByEmail(email: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("email", "=", email).executeTakeFirst() ?? null;
   }
 
-  public loadByEmail(email: string): Promise<User> {
-    return TypedDB.queryOne("SELECT * FROM users WHERE email=?", [email]) as Promise<User>;
+  public async loadByAuthGuid(authGuid: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("authGuid", "=", authGuid).executeTakeFirst() ?? null;
   }
 
-  public loadByAuthGuid(authGuid: string): Promise<User> {
-    return TypedDB.queryOne("SELECT * FROM users WHERE authGuid=?", [authGuid]) as Promise<User>;
+  public async loadByEmailPassword(email: string, hashedPassword: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("email", "=", email)
+      .where("password", "=", hashedPassword)
+      .executeTakeFirst() ?? null;
   }
 
-  public loadByEmailPassword(email: string, hashedPassword: string): Promise<User> {
-    return TypedDB.queryOne("SELECT * FROM users WHERE email=? AND password=?", [email, hashedPassword]) as Promise<User>;
+  public async loadByIds(ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "in", ids)
+      .execute();
   }
 
-  public loadByIds(ids: string[]): Promise<User[]> {
-    return TypedDB.query("SELECT * FROM users WHERE id IN (?)", [ids]) as Promise<User[]>;
-  }
-
-  public delete(id: string) {
-    return TypedDB.query("DELETE FROM users WHERE id=?", [id]);
+  public async delete(id: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("id", "=", id).execute();
   }
 
   public async loadCount() {
-    const data = (await TypedDB.queryOne("SELECT COUNT(*) as count FROM users", [])) as { count: string };
-    return parseInt(data.count, 0);
+    const result = await this.db.selectFrom(this.tableName)
+      .select(this.db.fn.countAll().as("count"))
+      .executeTakeFirst();
+    return Number((result as any)?.count) || 0;
   }
 
-  public async search(term: string): Promise<User[]> {
+  public async search(term: string): Promise<any[]> {
     const searchTerm = `%${term}%`;
-    const sql = "SELECT id, email, firstName, lastName FROM users WHERE email LIKE ? OR firstName LIKE ? OR lastName LIKE ? LIMIT 50";
-    const params = [searchTerm, searchTerm, searchTerm];
-    return TypedDB.query(sql, params) as Promise<User[]>;
+    return this.db.selectFrom(this.tableName)
+      .selectAll()
+      .where((eb) =>
+        eb.or([
+          eb("email", "like", searchTerm),
+          eb("firstName", "like", searchTerm),
+          eb("lastName", "like", searchTerm)
+        ])
+      )
+      .limit(50)
+      .execute();
   }
 }

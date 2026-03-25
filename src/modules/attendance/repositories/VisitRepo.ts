@@ -1,74 +1,86 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ArrayHelper } from "@churchapps/apihelper";
+import { injectable } from "inversify";
+import { sql } from "kysely";
 import { DateHelper } from "../../../shared/helpers/DateHelper.js";
-import { Visit } from "../models/index.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+@injectable()
+export class VisitRepo extends KyselyRepo {
+  protected readonly tableName = "visits";
+  protected readonly moduleName = "attendance";
+  protected readonly softDelete = false;
 
-export class VisitRepo extends ConfiguredRepo<Visit> {
-  protected get repoConfig(): RepoConfig<Visit> {
-    return {
-      tableName: "visits",
-      hasSoftDelete: false,
-      columns: ["personId", "serviceId", "groupId", "visitDate", "checkinTime", "addedBy"]
-    };
-  }
-
-  public save(visit: Visit) {
-    // Handle date conversion before saving
-    const processedVisit = { ...visit };
+  public override async save(model: any) {
+    const processedVisit = { ...model };
     if (processedVisit.visitDate) {
-      (processedVisit as any).visitDate = DateHelper.toMysqlDateOnly(processedVisit.visitDate);  // date-only field
+      processedVisit.visitDate = DateHelper.toMysqlDateOnly(processedVisit.visitDate);
     }
     if (processedVisit.checkinTime) {
-      (processedVisit as any).checkinTime = DateHelper.toMysqlDate(processedVisit.checkinTime);  // datetime field
+      processedVisit.checkinTime = DateHelper.toMysqlDate(processedVisit.checkinTime);
     }
     return super.save(processedVisit);
   }
 
-  public loadAllByDate(churchId: string, startDate: Date, endDate: Date) {
-    return TypedDB.query("SELECT * FROM visits WHERE churchId=? AND visitDate BETWEEN ? AND ?;", [churchId, DateHelper.toMysqlDateOnly(startDate), DateHelper.toMysqlDateOnly(endDate)]);
+  public async loadAllByDate(churchId: string, startDate: Date, endDate: Date) {
+    return this.db.selectFrom("visits").selectAll()
+      .where("churchId", "=", churchId)
+      .where("visitDate", ">=", DateHelper.toMysqlDateOnly(startDate) as any)
+      .where("visitDate", "<=", DateHelper.toMysqlDateOnly(endDate) as any)
+      .execute();
   }
 
-  public loadForSessionPerson(churchId: string, sessionId: string, personId: string) {
-    const sql =
-      "SELECT v.*" +
-      " FROM sessions s" +
-      " LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId" +
-      " INNER JOIN visits v on(v.serviceId = st.serviceId or v.groupId = s.groupId) and v.visitDate = s.sessionDate" +
-      " WHERE v.churchId=? AND s.id = ? AND v.personId=? LIMIT 1";
-    return TypedDB.queryOne(sql, [churchId, sessionId, personId]);
+  public async loadForSessionPerson(churchId: string, sessionId: string, personId: string) {
+    const result = await sql`
+      SELECT v.*
+      FROM sessions s
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      INNER JOIN visits v on(v."serviceId" = st."serviceId" or v."groupId" = s."groupId") and v."visitDate" = s."sessionDate"
+      WHERE v."churchId"=${churchId} AND s.id = ${sessionId} AND v."personId"=${personId} LIMIT 1
+    `.execute(this.db);
+    return (result.rows as any[])[0] ?? null;
   }
 
-  public loadByServiceDatePeopleIds(churchId: string, serviceId: string, visitDate: Date, peopleIds: string[]) {
-    const vsDate = DateHelper.toMysqlDateOnly(visitDate);  // date-only field
-    const sql = "SELECT * FROM visits WHERE churchId=? AND serviceId = ? AND visitDate = ? AND personId IN (" + ArrayHelper.fillArray("?", peopleIds.length).join(", ") + ")";
-    const params = [churchId, serviceId, vsDate].concat(peopleIds);
-    return TypedDB.query(sql, params);
+  public async loadByServiceDatePeopleIds(churchId: string, serviceId: string, visitDate: Date, peopleIds: string[]) {
+    const vsDate = DateHelper.toMysqlDateOnly(visitDate);
+    return this.db.selectFrom("visits").selectAll()
+      .where("churchId", "=", churchId)
+      .where("serviceId", "=", serviceId)
+      .where("visitDate", "=", vsDate as any)
+      .where("personId", "in", peopleIds)
+      .execute();
   }
 
   public async loadLastLoggedDate(churchId: string, serviceId: string, peopleIds: string[]) {
     let result = new Date();
     result.setHours(0, 0, 0, 0);
 
-    const sql = "SELECT max(visitDate) as visitDate FROM visits WHERE churchId=? AND serviceId = ? AND personId IN (" + ArrayHelper.fillArray("?", peopleIds.length).join(", ") + ")";
-    const params = [churchId, serviceId].concat(peopleIds);
-    const data: any = await TypedDB.queryOne(sql, params);
+    const data = await this.db.selectFrom("visits")
+      .select(sql`max("visitDate")`.as("visitDate"))
+      .where("churchId", "=", churchId)
+      .where("serviceId", "=", serviceId)
+      .where("personId", "in", peopleIds)
+      .executeTakeFirst();
 
-    if (data?.visitDate) result = new Date(data.visitDate);
+    if ((data as any)?.visitDate) result = new Date((data as any).visitDate);
     return result;
   }
 
-  public loadForPerson(churchId: string, personId: string) {
-    return TypedDB.query("SELECT * FROM visits WHERE churchId=? AND personId=?", [churchId, personId]);
+  public async loadForPerson(churchId: string, personId: string) {
+    return this.db.selectFrom("visits").selectAll()
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .execute();
   }
 
   public async loadConsecutiveWeekStreaks(churchId: string, personIds: string[]): Promise<Record<string, number>> {
     if (personIds.length === 0) return {};
-    const sql = "SELECT personId, YEARWEEK(visitDate, 3) AS yw FROM visits WHERE churchId = ? AND personId IN ("
-      + ArrayHelper.fillArray("?", personIds.length).join(", ")
-      + ") GROUP BY personId, yw ORDER BY personId, yw DESC";
-    const rows: any[] = await TypedDB.query(sql, [churchId, ...personIds]) as any[];
+    const result = await sql`
+      SELECT "personId", YEARWEEK("visitDate", 3) AS yw
+      FROM visits
+      WHERE "churchId" = ${churchId} AND "personId" IN (${sql.join(personIds)})
+      GROUP BY "personId", yw
+      ORDER BY "personId", yw DESC
+    `.execute(this.db);
+    const rows = result.rows as any[];
 
     const byPerson: Record<string, number[]> = {};
     for (const row of rows) {
@@ -77,12 +89,12 @@ export class VisitRepo extends ConfiguredRepo<Visit> {
     }
 
     const currentYw = this.getIsoYearWeek(new Date());
-    const result: Record<string, number> = {};
+    const streaks: Record<string, number> = {};
     for (const personId of personIds) {
       const weeks = byPerson[personId] || [];
-      result[personId] = this.countConsecutiveWeeks(weeks, currentYw);
+      streaks[personId] = this.countConsecutiveWeeks(weeks, currentYw);
     }
-    return result;
+    return streaks;
   }
 
   private getIsoYearWeek(date: Date): number {
@@ -116,14 +128,14 @@ export class VisitRepo extends ConfiguredRepo<Visit> {
     return (year - 1) * 100 + lastWeek;
   }
 
-  protected rowToModel(row: any): Visit {
+  public convertToModel(_churchId: string, data: any) {
     return {
-      id: row.id,
-      personId: row.personId,
-      serviceId: row.serviceId,
-      groupId: row.groupId,
-      visitDate: row.visitDate,
-      checkinTime: row.checkinTime
+      id: data.id,
+      personId: data.personId,
+      serviceId: data.serviceId,
+      groupId: data.groupId,
+      visitDate: data.visitDate,
+      checkinTime: data.checkinTime
     };
   }
 }

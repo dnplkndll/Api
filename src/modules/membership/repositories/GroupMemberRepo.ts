@@ -1,100 +1,110 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
+import { sql } from "kysely";
 import { GroupMember } from "../models/index.js";
 import { PersonHelper } from "../helpers/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class GroupMemberRepo extends ConfiguredRepo<GroupMember> {
-  protected get repoConfig(): RepoConfig<GroupMember> {
-    return {
-      tableName: "groupMembers",
-      hasSoftDelete: false,
-      columns: ["groupId", "personId", "leader"],
-      insertLiterals: { joinDate: "NOW()" }
-    };
+export class GroupMemberRepo extends KyselyRepo {
+  protected readonly tableName = "groupMembers";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async save(model: any) {
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = this.createId();
+      await sql`INSERT INTO "groupMembers" (id, "churchId", "groupId", "personId", leader, "joinDate") VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.personId}, ${model.leader}, NOW())`.execute(this.db);
+    }
+    return model;
   }
 
-  public loadForGroup(churchId: string, groupId: string) {
-    const sql =
-      "SELECT gm.*, " +
-      "p.photoUpdated, p.displayName, p.email, p.homePhone, p.mobilePhone, p.workPhone, p.optedOut, " +
-      "p.address1, p.address2, p.city, p.state, p.zip, " +
-      "p.householdId, p.householdRole " +
-      "FROM groupMembers gm " +
-      "INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL) " +
-      "WHERE gm.churchId=? AND gm.groupId=? " +
-      "ORDER BY gm.leader DESC, p.lastName, p.firstName;";
-    return TypedDB.query(sql, [churchId, groupId]);
+  public async loadForGroup(churchId: string, groupId: string) {
+    const result = await sql`SELECT gm.*,
+      p."photoUpdated", p."displayName", p.email, p."homePhone", p."mobilePhone", p."workPhone", p."optedOut",
+      p.address1, p.address2, p.city, p.state, p.zip,
+      p."householdId", p."householdRole"
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId"=${groupId}
+      ORDER BY gm.leader DESC, p."lastName", p."firstName"`.execute(this.db);
+    return result.rows;
   }
 
-  public loadLeadersForGroup(churchId: string, groupId: string) {
-    const sql =
-      "SELECT gm.*, p.photoUpdated, p.displayName" +
-      " FROM groupMembers gm" +
-      " INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL)" +
-      " WHERE gm.churchId=? AND gm.groupId=? and gm.leader=1" +
-      " ORDER BY p.lastName, p.firstName;";
-    return TypedDB.query(sql, [churchId, groupId]);
+  public async loadLeadersForGroup(churchId: string, groupId: string) {
+    const result = await sql`SELECT gm.*, p."photoUpdated", p."displayName"
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId"=${groupId} and gm.leader=true
+      ORDER BY p."lastName", p."firstName"`.execute(this.db);
+    return result.rows;
   }
 
-  public loadForGroups(churchId: string, groupIds: string[]) {
-    const sql =
-      "SELECT gm.*, p.photoUpdated, p.displayName, p.email" +
-      " FROM groupMembers gm" +
-      " INNER JOIN people p on p.id=gm.personId AND (p.removed=0 OR p.removed IS NULL)" +
-      " WHERE gm.churchId=? AND gm.groupId IN (?)" +
-      " ORDER BY gm.leader desc, p.lastName, p.firstName;";
-    return TypedDB.query(sql, [churchId, groupIds]);
+  public async loadForGroups(churchId: string, groupIds: string[]) {
+    if (groupIds.length === 0) return [];
+    const result = await sql`SELECT gm.*, p."photoUpdated", p."displayName", p.email
+      FROM "groupMembers" gm
+      INNER JOIN people p on p.id=gm."personId" AND (p.removed=false OR p.removed IS NULL)
+      WHERE gm."churchId"=${churchId} AND gm."groupId" IN (${sql.join(groupIds)})
+      ORDER BY gm.leader desc, p."lastName", p."firstName"`.execute(this.db);
+    return result.rows;
   }
 
-  public loadForPerson(churchId: string, personId: string) {
-    const sql =
-      "SELECT gm.*, g.name as groupName" + " FROM groupMembers gm" + " INNER JOIN `groups` g on g.Id=gm.groupId" + " WHERE gm.churchId=? AND gm.personId=? AND g.removed=0" + " ORDER BY g.name;";
-    return TypedDB.query(sql, [churchId, personId]);
+  public async loadForPerson(churchId: string, personId: string) {
+    const result = await sql`SELECT gm.*, g.name as "groupName"
+      FROM "groupMembers" gm
+      INNER JOIN "groups" g on g.id=gm."groupId"
+      WHERE gm."churchId"=${churchId} AND gm."personId"=${personId} AND g.removed=false
+      ORDER BY g.name`.execute(this.db);
+    return result.rows;
   }
 
-  public loadForPeople(peopleIds: string[]) {
-    const sql = "SELECT gm.*, g.name, g.tags" + " FROM groupMembers gm" + " INNER JOIN `groups` g on g.Id=gm.groupId" + " WHERE gm.personId IN (?);";
-    return TypedDB.query(sql, [peopleIds]);
+  public async loadForPeople(peopleIds: string[]) {
+    if (peopleIds.length === 0) return [];
+    const result = await sql`SELECT gm.*, g.name, g.tags
+      FROM "groupMembers" gm
+      INNER JOIN "groups" g on g.id=gm."groupId"
+      WHERE gm."personId" IN (${sql.join(peopleIds)})`.execute(this.db);
+    return result.rows;
   }
 
-  protected rowToModel(row: any): GroupMember {
+  public convertToModel(_churchId: string, data: any) {
     const result: GroupMember = {
-      id: row.id,
-      churchId: row.churchId,
-      groupId: row.groupId,
-      personId: row.personId,
-      joinDate: row.joinDate,
-      leader: row.leader
+      id: data.id,
+      churchId: data.churchId,
+      groupId: data.groupId,
+      personId: data.personId,
+      joinDate: data.joinDate,
+      leader: data.leader
     };
-    if (row.displayName !== undefined) {
+    if (data.displayName !== undefined) {
       result.person = {
         id: result.personId,
-        photoUpdated: row.photoUpdated,
-        name: { display: row.displayName },
+        photoUpdated: data.photoUpdated,
+        name: { display: data.displayName },
         contactInfo: {
-          email: row.email,
-          homePhone: row.homePhone,
-          mobilePhone: row.mobilePhone,
-          workPhone: row.workPhone,
-          address1: row.address1,
-          address2: row.address2,
-          city: row.city,
-          state: row.state,
-          zip: row.zip
+          email: data.email,
+          homePhone: data.homePhone,
+          mobilePhone: data.mobilePhone,
+          workPhone: data.workPhone,
+          address1: data.address1,
+          address2: data.address2,
+          city: data.city,
+          state: data.state,
+          zip: data.zip
         },
-        householdId: row.householdId,
-        householdRole: row.householdRole,
-        optedOut: row.optedOut
+        householdId: data.householdId,
+        householdRole: data.householdRole,
+        optedOut: data.optedOut
       };
-      result.person.photo = PersonHelper.getPhotoPath(row.churchId, result.person);
+      result.person.photo = PersonHelper.getPhotoPath(data.churchId, result.person);
     }
-    if (row.groupName !== undefined) result.group = { id: result.groupId, name: row.groupName };
-
+    if (data.groupName !== undefined) result.group = { id: result.groupId, name: data.groupName };
     return result;
   }
-
 
   public convertAllToBasicModel(churchId: string, data: any[]) {
     const result: GroupMember[] = [];

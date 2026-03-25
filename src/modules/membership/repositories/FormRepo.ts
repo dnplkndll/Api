@@ -1,91 +1,103 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Form } from "../models/index.js";
+import { sql } from "kysely";
 import { DateHelper } from "../helpers/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class FormRepo extends ConfiguredRepo<Form> {
-  protected get repoConfig(): RepoConfig<Form> {
+export class FormRepo extends KyselyRepo {
+  protected readonly tableName = "forms";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = true;
+
+  public async save(model: any) {
+    if (model.id) {
+      model.accessStartTime = model.accessStartTime ? DateHelper.toMysqlDate(model.accessStartTime) : null;
+      model.accessEndTime = model.accessEndTime ? DateHelper.toMysqlDate(model.accessEndTime) : null;
+      await sql`UPDATE forms SET name=${model.name}, "contentType"=${model.contentType}, restricted=${model.restricted}, "accessStartTime"=${model.accessStartTime}, "accessEndTime"=${model.accessEndTime}, archived=${model.archived}, "thankYouMessage"=${model.thankYouMessage}, "modifiedTime"=NOW() WHERE id=${model.id} AND "churchId"=${model.churchId}`.execute(this.db);
+    } else {
+      model.id = this.createId();
+      model.accessStartTime = model.accessStartTime ? DateHelper.toMysqlDate(model.accessStartTime) : null;
+      model.accessEndTime = model.accessEndTime ? DateHelper.toMysqlDate(model.accessEndTime) : null;
+      await sql`INSERT INTO forms (id, "churchId", name, "contentType", "accessStartTime", "accessEndTime", restricted, "thankYouMessage", "createdTime", "modifiedTime", archived, removed) VALUES (${model.id}, ${model.churchId}, ${model.name}, ${model.contentType}, ${model.accessStartTime}, ${model.accessEndTime}, ${model.restricted}, ${model.thankYouMessage}, NOW(), NOW(), false, false)`.execute(this.db);
+    }
+    return model;
+  }
+
+  public async loadAllArchived(churchId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("archived", "=", true as any)
+      .execute();
+  }
+
+  public async loadByIds(churchId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("archived", "=", false as any)
+      .where("id", "in", ids)
+      .orderBy("name")
+      .execute();
+  }
+
+  public async loadNonMemberForms(churchId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("contentType", "<>", "form")
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("archived", "=", false as any)
+      .execute();
+  }
+
+  public async loadNonMemberArchivedForms(churchId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("contentType", "<>", "form")
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("archived", "=", true as any)
+      .execute();
+  }
+
+  public async loadMemberForms(churchId: string, personId: string) {
+    const result = await sql`SELECT f.* , mp.action FROM forms f LEFT JOIN "memberPermissions" mp ON mp."contentId" = f.id WHERE mp."memberId"=${personId} AND f."churchId"=${churchId} AND f.removed=false AND f.archived=false`.execute(this.db);
+    return result.rows;
+  }
+
+  public async loadMemberArchivedForms(churchId: string, personId: string) {
+    const result = await sql`SELECT f.* FROM forms f LEFT JOIN "memberPermissions" mp ON mp."contentId" = f.id WHERE mp."memberId"=${personId} AND f."churchId"=${churchId} AND f.removed=false AND f.archived=true`.execute(this.db);
+    return result.rows;
+  }
+
+  public async loadWithMemberPermissions(churchId: string, formId: string, personId: string) {
+    const result = await sql`SELECT f.*, mp.action FROM forms f LEFT JOIN "memberPermissions" mp ON mp."contentId" = f.id WHERE f.id=${formId} AND f."churchId"=${churchId} AND mp."memberId"=${personId} AND f.removed=false AND f.archived=false`.execute(this.db);
+    return (result.rows as any[])[0] ?? null;
+  }
+
+  public async access(id: string) {
+    return await this.db.selectFrom(this.tableName)
+      .select(["id", "name", "restricted", "churchId"])
+      .where("id", "=", id)
+      .where("removed", "=", false as any)
+      .where("archived", "=", false as any)
+      .executeTakeFirst() ?? null;
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "forms",
-      hasSoftDelete: true,
-      removedColumn: "removed",
-      insertColumns: ["name", "contentType", "accessStartTime", "accessEndTime", "restricted", "thankYouMessage"],
-      updateColumns: ["name", "contentType", "restricted", "accessStartTime", "accessEndTime", "archived", "thankYouMessage"],
-      insertLiterals: { createdTime: "NOW()", modifiedTime: "NOW()", archived: "0", removed: "0" },
-      updateLiterals: { modifiedTime: "NOW()" }
-    };
-  }
-  protected async create(form: Form): Promise<Form> {
-    (form as any).accessStartTime = form.accessStartTime ? DateHelper.toMysqlDate(form.accessStartTime) : null;
-    (form as any).accessEndTime = form.accessEndTime ? DateHelper.toMysqlDate(form.accessEndTime) : null;
-    return super.create(form);
-  }
-
-  protected async update(form: Form): Promise<Form> {
-    (form as any).accessStartTime = form.accessStartTime ? DateHelper.toMysqlDate(form.accessStartTime) : null;
-    (form as any).accessEndTime = form.accessEndTime ? DateHelper.toMysqlDate(form.accessEndTime) : null;
-    return super.update(form);
-  }
-
-  public loadAllArchived(churchId: string) {
-    return TypedDB.query("SELECT * FROM forms WHERE churchId=? AND removed=0 AND archived=1;", [churchId]);
-  }
-
-  public loadByIds(churchId: string, ids: string[]) {
-    const quotedAndCommaSeparated = ids.length === 0 ? "" : "'" + ids.join("','") + "'";
-    const sql = "SELECT * FROM forms WHERE churchId=? AND removed=0 AND archived=0 AND id IN (" + quotedAndCommaSeparated + ") ORDER by name";
-    return TypedDB.query(sql, [churchId]);
-  }
-
-  public loadNonMemberForms(churchId: string) {
-    return TypedDB.query("SELECT * FROM forms WHERE contentType<>'form' AND churchId=? AND removed=0 AND archived=0", [churchId]);
-  }
-
-  public loadNonMemberArchivedForms(churchId: string) {
-    return TypedDB.query("SELECT * FROM forms WHERE contentType<>'form' AND churchId=? AND removed=0 AND archived=1", [churchId]);
-  }
-
-  public loadMemberForms(churchId: string, personId: string) {
-    return TypedDB.query(
-      "SELECT f.* , mp.action FROM forms f  " + "LEFT JOIN memberPermissions mp " + "ON mp.contentId = f.id " + "WHERE mp.memberId=? AND f.churchId=? AND f.removed=0 AND f.archived=0",
-      [personId, churchId]
-    );
-  }
-
-  public loadMemberArchivedForms(churchId: string, personId: string) {
-    return TypedDB.query("SELECT f.* FROM forms f  " + "LEFT JOIN memberPermissions mp " + "ON mp.contentId = f.id " + "WHERE mp.memberId=? AND f.churchId=? AND f.removed=0 AND f.archived=1", [
-      personId,
-      churchId
-    ]);
-  }
-
-  public loadWithMemberPermissions(churchId: string, formId: string, personId: string) {
-    return TypedDB.queryOne(
-      "SELECT f.*, mp.action FROM forms f " + "LEFT JOIN memberPermissions mp " + "ON mp.contentId = f.id " + "WHERE f.id=? AND f.churchId=? AND mp.memberId=? AND f.removed=0 AND archived=0",
-      [formId, churchId, personId]
-    );
-  }
-
-  public access(id: string) {
-    return TypedDB.queryOne("SELECT id, name, restricted, churchId FROM forms WHERE id=? AND removed=0 AND archived=0;", [id]);
-  }
-
-  protected rowToModel(row: any): Form {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      name: row.name,
-      contentType: row.contentType,
-      createdTime: row.createdTime,
-      modifiedTime: row.modifiedTime,
-      accessStartTime: row.accessStartTime,
-      accessEndTime: row.accessEndTime,
-      restricted: row.restricted,
-      archived: row.archived,
-      action: row.action,
-      thankYouMessage: row.thankYouMessage
+      id: data.id,
+      churchId: data.churchId,
+      name: data.name,
+      contentType: data.contentType,
+      createdTime: data.createdTime,
+      modifiedTime: data.modifiedTime,
+      accessStartTime: data.accessStartTime,
+      accessEndTime: data.accessEndTime,
+      restricted: data.restricted,
+      archived: data.archived,
+      action: data.action,
+      thankYouMessage: data.thankYouMessage
     };
   }
 }

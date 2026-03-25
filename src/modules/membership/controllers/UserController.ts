@@ -466,7 +466,7 @@ export class UserController extends MembershipBaseController {
         return this.json([], 200);
       }
 
-      const users = await this.repos.user.search(term.trim());
+      const users = await this.repos.user.search(term.trim()) as any[];
       users.forEach((user) => {
         user.password = null;
         user.authGuid = null;

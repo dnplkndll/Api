@@ -1,53 +1,35 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { NotificationPreference } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
 import { injectable } from "inversify";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class NotificationPreferenceRepo extends ConfiguredRepo<NotificationPreference> {
-  protected get repoConfig(): RepoConfig<NotificationPreference> {
-    return {
-      tableName: "notificationPreferences",
-      hasSoftDelete: false,
-      columns: ["personId", "allowPush", "emailFrequency"]
-    };
-  }
-  public loadById(churchId: string, id: string) {
-    return TypedDB.queryOne("SELECT * FROM notificationPreferences WHERE id=? and churchId=?;", [id, churchId]);
+export class NotificationPreferenceRepo extends KyselyRepo {
+  protected readonly tableName = "notificationPreferences";
+  protected readonly moduleName = "messaging";
+  protected readonly softDelete = false;
+
+  public async loadById(churchId: string, id: string) {
+    return (await this.db.selectFrom("notificationPreferences").selectAll()
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 
-  public loadByPersonId(churchId: string, personId: string) {
-    return TypedDB.queryOne("SELECT * FROM notificationPreferences WHERE churchId=? AND personId=?", [churchId, personId]);
+  public async loadByPersonId(churchId: string, personId: string) {
+    return (await this.db.selectFrom("notificationPreferences").selectAll()
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .executeTakeFirst()) ?? null;
   }
 
-  public loadByChurchId(churchId: string) {
-    return TypedDB.query("SELECT * FROM notificationPreferences WHERE churchId=?", [churchId]);
+  public async loadByChurchId(churchId: string) {
+    return this.db.selectFrom("notificationPreferences").selectAll()
+      .where("churchId", "=", churchId)
+      .execute();
   }
 
-  public delete(churchId: string, id: string) {
-    return TypedDB.query("DELETE FROM notificationPreferences WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  protected rowToModel(data: any): NotificationPreference {
-    return {
-      id: data.id,
-      churchId: data.churchId,
-      personId: data.personId,
-      allowPush: data.allowPush,
-      emailFrequency: data.emailFrequency
-    };
-  }
-
-  public convertToModel(data: any) {
-    return this.rowToModel(data);
-  }
-
-  public convertAllToModel(data: any) {
-    return this.mapToModels(data);
-  }
-
-  public loadByPersonIds(personIds: string[]) {
-    const sql = "SELECT * FROM notificationPreferences WHERE personId IN (?)";
-    return TypedDB.query(sql, [personIds]);
+  public async loadByPersonIds(personIds: string[]) {
+    return this.db.selectFrom("notificationPreferences").selectAll()
+      .where("personId", "in", personIds)
+      .execute();
   }
 }

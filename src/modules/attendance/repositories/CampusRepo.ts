@@ -1,21 +1,20 @@
 import { injectable } from "inversify";
-import { ConfiguredRepo, type RepoConfig } from "../../../shared/infrastructure/index.js";
-import { Campus } from "../models/index.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class CampusRepo extends ConfiguredRepo<Campus> {
-  protected get repoConfig(): RepoConfig<Campus> {
-    return {
-      tableName: "campuses",
-      hasSoftDelete: true,
-      defaultOrderBy: "name",
-      columns: ["name", "address1", "address2", "city", "state", "zip"],
-      insertLiterals: { removed: "0" }
-    };
+export class CampusRepo extends KyselyRepo {
+  protected readonly tableName = "campuses";
+  protected readonly moduleName = "attendance";
+  protected readonly softDelete = true;
+
+  public override async loadAll(churchId: string) {
+    return this.db.selectFrom("campuses").selectAll()
+      .where("churchId", "=", churchId).where("removed", "=", false as any)
+      .orderBy("name").execute();
   }
 
-  protected rowToModel(data: any): Campus {
-    const result: Campus = {
+  public convertToModel(_churchId: string, data: any) {
+    return {
       id: data.id,
       name: data.name,
       address1: data.address1,
@@ -25,6 +24,5 @@ export class CampusRepo extends ConfiguredRepo<Campus> {
       zip: data.zip,
       importKey: data.importKey
     };
-    return result;
   }
 }

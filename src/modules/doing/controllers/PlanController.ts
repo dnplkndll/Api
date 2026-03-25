@@ -108,7 +108,7 @@ export class PlanController extends DoingBaseController {
 
     // Copy assignments if requested
     if (copyAssignments) {
-      const assignments = await this.repos.assignment.loadByPlanId(churchId, sourcePlanId);
+      const assignments = await this.repos.assignment.loadByPlanId(churchId, sourcePlanId) as any[];
       for (const assignment of assignments) {
         const newPositionId = positionIdMap.get(assignment.positionId || "");
         if (newPositionId) {

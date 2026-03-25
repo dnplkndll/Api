@@ -1,28 +1,24 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Time } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class TimeRepo extends ConfiguredRepo<Time> {
-  protected get repoConfig(): RepoConfig<Time> {
-    return {
-      tableName: "times",
-      hasSoftDelete: false,
-      columns: ["planId", "displayName", "startTime", "endTime", "teams"]
-    };
+export class TimeRepo extends KyselyRepo {
+  protected readonly tableName = "times";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public async deleteByPlanId(churchId: string, planId: string) {
+    await this.db.deleteFrom("times")
+      .where("churchId", "=", churchId).where("planId", "=", planId).execute();
   }
 
-  public deleteByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("DELETE FROM times WHERE churchId=? and planId=?;", [churchId, planId]);
+  public async loadByPlanId(churchId: string, planId: string) {
+    return this.db.selectFrom("times").selectAll()
+      .where("churchId", "=", churchId).where("planId", "=", planId).execute();
   }
 
-  public loadByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("SELECT * FROM times WHERE churchId=? AND planId=?;", [churchId, planId]);
-  }
-
-  public loadByPlanIds(churchId: string, planIds: string[]) {
-    return TypedDB.query("SELECT * FROM times WHERE churchId=? and planId in (?);", [churchId, planIds]);
+  public async loadByPlanIds(churchId: string, planIds: string[]) {
+    return this.db.selectFrom("times").selectAll()
+      .where("churchId", "=", churchId).where("planId", "in", planIds).execute();
   }
 }

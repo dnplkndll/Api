@@ -1,46 +1,54 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { File } from "../models/index.js";
-import { ArrayHelper } from "@churchapps/apihelper";
+import { injectable } from "inversify";
+import { sql } from "kysely";
+import { UniqueIdHelper } from "@churchapps/apihelper";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+@injectable()
+export class FileRepo extends KyselyRepo {
+  protected readonly tableName = "files";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-export class FileRepo extends ConfiguredRepo<File> {
-  protected get repoConfig(): RepoConfig<File> {
-    return {
-      tableName: "files",
-      hasSoftDelete: false,
-      insertColumns: ["contentType", "contentId", "fileName", "contentPath", "fileType", "size"],
-      updateColumns: ["contentType", "contentId", "fileName", "contentPath", "fileType", "size", "dateModified"],
-      insertLiterals: { dateModified: "NOW()" }
-    };
+  public async save(model: any) {
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      setData.dateModified = sql`NOW()`;
+      await this.db.updateTable("files").set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await this.db.insertInto("files").values({
+        ...model,
+        dateModified: sql`NOW()`
+      }).execute();
+    }
+    return model;
   }
 
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM files WHERE id=? AND churchId=?", [id, churchId]);
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("files").selectAll()
+      .where("churchId", "=", churchId)
+      .where("id", "in", ids)
+      .execute();
   }
 
-  public async load(churchId: string, id: string): Promise<File> {
-    return TypedDB.queryOne("SELECT * FROM files WHERE id=? AND churchId=?", [id, churchId]);
+  public async loadForContent(churchId: string, contentType: string, contentId: string) {
+    return this.db.selectFrom("files").selectAll()
+      .where("churchId", "=", churchId)
+      .where("contentType", "=", contentType)
+      .where("contentId", "=", contentId)
+      .execute();
   }
 
-  public async loadAll(churchId: string): Promise<File[]> {
-    return TypedDB.query("SELECT * FROM files WHERE churchId=?", [churchId]);
+  public async loadForWebsite(churchId: string) {
+    return this.db.selectFrom("files").selectAll()
+      .where("churchId", "=", churchId)
+      .where("contentType", "=", "website")
+      .execute();
   }
 
-  public loadByIds(churchId: string, ids: string[]): Promise<File[]> {
-    const sql = "SELECT * FROM files WHERE churchId=? AND id IN (" + ArrayHelper.fillArray("?", ids.length) + ")";
-    return TypedDB.query(sql, [churchId].concat(ids));
-  }
-
-  public loadForContent(churchId: string, contentType: string, contentId: string): Promise<File[]> {
-    return TypedDB.query("SELECT * FROM files WHERE churchId=? and contentType=? and contentId=?", [churchId, contentType, contentId]);
-  }
-
-  public loadForWebsite(churchId: string): Promise<File[]> {
-    return TypedDB.query("SELECT * FROM files WHERE churchId=? and contentType='website'", [churchId]);
-  }
-
-  public loadTotalBytes(churchId: string, contentType: string, contentId: string): Promise<{ size: number }> {
-    return TypedDB.query("select IFNULL(sum(size), 0) as size from files where churchId=? and contentType=? and contentId=?", [churchId, contentType, contentId]);
+  public async loadTotalBytes(churchId: string, contentType: string, contentId: string) {
+    const result = await sql`select COALESCE(sum(size), 0) as size from files where "churchId"=${churchId} and "contentType"=${contentType} and "contentId"=${contentId}`.execute(this.db);
+    return result.rows[0] as { size: number };
   }
 }

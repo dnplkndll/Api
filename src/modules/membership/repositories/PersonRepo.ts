@@ -1,256 +1,259 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
 import { injectable } from "inversify";
+import { sql } from "kysely";
 import { DateHelper, PersonHelper, UniqueIdHelper } from "../helpers/index.js";
 import { Person } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
 import { CollectionHelper } from "../../../shared/helpers/index.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class PersonRepo extends ConfiguredRepo<Person> {
-  protected get repoConfig(): RepoConfig<Person> {
-    return {
-      tableName: "people",
-      hasSoftDelete: true,
-      removedColumn: "removed",
-      columns: [
-        "displayName",
-        "firstName",
-        "middleName",
-        "lastName",
-        "nickName",
-        "prefix",
-        "suffix",
-        "birthDate",
-        "gender",
-        "maritalStatus",
-        "anniversary",
-        "membershipStatus",
-        "homePhone",
-        "mobilePhone",
-        "workPhone",
-        "email",
-        "nametagNotes",
-        "donorNumber",
-        "address1",
-        "address2",
-        "city",
-        "state",
-        "zip",
-        "photoUpdated",
-        "householdId",
-        "householdRole",
-        "conversationId",
-        "optedOut"
-      ],
-      insertLiterals: { removed: "0" }
-    };
-  }
-  public save(person: Person) {
+export class PersonRepo extends KyselyRepo {
+  protected readonly tableName = "people";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = true;
+
+  public async save(person: any) {
+    person.name = person.name || {};
     person.name.display = PersonHelper.getDisplayNameFromPerson(person);
-    return super.save(person);
-  }
-
-  protected async create(person: Person): Promise<Person> {
-    // Prepare complex fields before calling super.create()
-    this.prepareDateFields(person);
     this.prepareContactFields(person);
-    return super.create(person);
-  }
-
-  private prepareDateFields(person: Person) {
-    (person as any).birthDate = DateHelper.toMysqlDateOnly(person.birthDate);  // date-only field
-    (person as any).anniversary = DateHelper.toMysqlDateOnly(person.anniversary);  // date-only field
-    (person as any).photoUpdated = DateHelper.toMysqlDate(person.photoUpdated);
-  }
-
-  private prepareContactFields(person: Person) {
-    // Map contact info fields to flat structure
-    (person as any).homePhone = person.contactInfo?.homePhone;
-    (person as any).mobilePhone = person.contactInfo?.mobilePhone;
-    (person as any).workPhone = person.contactInfo?.workPhone;
-    (person as any).email = person.contactInfo?.email;
-    (person as any).address1 = person.contactInfo?.address1;
-    (person as any).address2 = person.contactInfo?.address2;
-    (person as any).city = person.contactInfo?.city;
-    (person as any).state = person.contactInfo?.state;
-    (person as any).zip = person.contactInfo?.zip;
-
-    // Map name fields to flat structure
-    (person as any).displayName = person.name?.display;
-    (person as any).firstName = person.name?.first;
-    (person as any).middleName = person.name?.middle;
-    (person as any).lastName = person.name?.last;
-    (person as any).nickName = person.name?.nick;
-    (person as any).prefix = person.name?.prefix;
-    (person as any).suffix = person.name?.suffix;
-  }
-
-  public updateOptedOut(personId: string, optedOut: boolean) {
-    const sql = "UPDATE people SET optedOut=? WHERE id=?";
-    const params = [optedOut, personId];
-    return TypedDB.query(sql, params);
-  }
-
-  protected async update(person: Person): Promise<Person> {
-    // Prepare complex fields before calling super.update()
     this.prepareDateFields(person);
-    this.prepareContactFields(person);
-    return super.update(person);
-  }
 
-  public async updateHousehold(person: Person) {
-    const sql = "UPDATE people SET householdId=?, householdRole=? WHERE id=? and churchId=?";
-    const params = [person.householdId, person.householdRole, person.id, person.churchId];
-    await TypedDB.query(sql, params);
+    if (person.id) {
+      const { id: _id, churchId: _cid, ...setData } = person;
+      // Remove nested objects that aren't DB columns
+      delete setData.name;
+      delete setData.contactInfo;
+      delete setData.photo;
+      delete setData.importKey;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", person.id).where("churchId", "=", person.churchId).execute();
+    } else {
+      person.id = this.createId();
+      const values: any = {
+        id: person.id,
+        churchId: person.churchId,
+        displayName: person.displayName,
+        firstName: person.firstName,
+        middleName: person.middleName,
+        lastName: person.lastName,
+        nickName: person.nickName,
+        prefix: person.prefix,
+        suffix: person.suffix,
+        birthDate: person.birthDate,
+        gender: person.gender,
+        maritalStatus: person.maritalStatus,
+        anniversary: person.anniversary,
+        membershipStatus: person.membershipStatus,
+        homePhone: person.homePhone,
+        mobilePhone: person.mobilePhone,
+        workPhone: person.workPhone,
+        email: person.email,
+        nametagNotes: person.nametagNotes,
+        donorNumber: person.donorNumber,
+        address1: person.address1,
+        address2: person.address2,
+        city: person.city,
+        state: person.state,
+        zip: person.zip,
+        photoUpdated: person.photoUpdated,
+        householdId: person.householdId,
+        householdRole: person.householdRole,
+        conversationId: person.conversationId,
+        optedOut: person.optedOut,
+        removed: false
+      };
+      await this.db.insertInto(this.tableName).values(values).execute();
+    }
     return person;
   }
 
-  public restore(churchId: string, id: string) {
-    return TypedDB.query("UPDATE people SET removed=0 WHERE id=? AND churchId=?;", [id, churchId]);
+  private prepareDateFields(person: any) {
+    person.birthDate = DateHelper.toMysqlDateOnly(person.birthDate);
+    person.anniversary = DateHelper.toMysqlDateOnly(person.anniversary);
+    person.photoUpdated = DateHelper.toMysqlDate(person.photoUpdated);
   }
 
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM people WHERE id IN (?) AND churchId=?;", [ids, churchId]);
+  private prepareContactFields(person: any) {
+    person.homePhone = person.contactInfo?.homePhone;
+    person.mobilePhone = person.contactInfo?.mobilePhone;
+    person.workPhone = person.contactInfo?.workPhone;
+    person.email = person.contactInfo?.email;
+    person.address1 = person.contactInfo?.address1;
+    person.address2 = person.contactInfo?.address2;
+    person.city = person.contactInfo?.city;
+    person.state = person.contactInfo?.state;
+    person.zip = person.contactInfo?.zip;
+
+    person.displayName = person.name?.display;
+    person.firstName = person.name?.first;
+    person.middleName = person.name?.middle;
+    person.lastName = person.name?.last;
+    person.nickName = person.name?.nick;
+    person.prefix = person.name?.prefix;
+    person.suffix = person.name?.suffix;
   }
 
-  public loadByIdsOnly(ids: string[]) {
-    return TypedDB.query("SELECT * FROM people WHERE id IN (?);", [ids]);
+  public async updateOptedOut(personId: string, optedOut: boolean) {
+    await this.db.updateTable(this.tableName).set({ optedOut } as any)
+      .where("id", "=", personId).execute();
   }
 
-  public loadMembers(churchId: string) {
-    return TypedDB.query("SELECT * FROM people WHERE churchId=? AND removed=0 and membershipStatus in ('Member', 'Staff');", [churchId]);
+  public async updateHousehold(person: any) {
+    await this.db.updateTable(this.tableName)
+      .set({ householdId: person.householdId, householdRole: person.householdRole } as any)
+      .where("id", "=", person.id)
+      .where("churchId", "=", person.churchId)
+      .execute();
+    return person;
   }
 
-  public loadMembersByVisibility(churchId: string, directoryVisibility: string) {
-    let statusFilter: string;
+  public async restore(churchId: string, id: string) {
+    await this.db.updateTable(this.tableName).set({ removed: false } as any)
+      .where("id", "=", id).where("churchId", "=", churchId).execute();
+  }
+
+  public async loadByIds(churchId: string, ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "in", ids)
+      .where("churchId", "=", churchId)
+      .execute();
+  }
+
+  public async loadByIdsOnly(ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "in", ids)
+      .execute();
+  }
+
+  public async loadMembers(churchId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("membershipStatus", "in", ["Member", "Staff"])
+      .execute();
+  }
+
+  public async loadMembersByVisibility(churchId: string, directoryVisibility: string) {
+    let statusFilter: string[];
     switch (directoryVisibility) {
-      case "Staff": statusFilter = "('Staff')"; break;
-      case "Members": statusFilter = "('Member', 'Staff')"; break;
-      case "Regular Attendees": statusFilter = "('Regular Attendee', 'Member', 'Staff')"; break;
-      case "Everyone": statusFilter = "('Visitor', 'Regular Attendee', 'Member', 'Staff')"; break;
-      default: statusFilter = "('Member', 'Staff')"; break;
+      case "Staff": statusFilter = ["Staff"]; break;
+      case "Members": statusFilter = ["Member", "Staff"]; break;
+      case "Regular Attendees": statusFilter = ["Regular Attendee", "Member", "Staff"]; break;
+      case "Everyone": statusFilter = ["Visitor", "Regular Attendee", "Member", "Staff"]; break;
+      default: statusFilter = ["Member", "Staff"]; break;
     }
-    return TypedDB.query(`SELECT * FROM people WHERE churchId=? AND removed=0 and membershipStatus in ${statusFilter};`, [churchId]);
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("removed", "=", false as any)
+      .where("membershipStatus", "in", statusFilter)
+      .execute();
   }
 
-  public loadRecent(churchId: string, filterOptedOut?: boolean) {
-    const filter = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
-    return TypedDB.query("SELECT * FROM (SELECT * FROM people WHERE churchId=? AND removed=0" + filter + " order by id desc limit 25) people ORDER BY lastName, firstName;", [churchId]);
+  public async loadRecent(churchId: string, filterOptedOut?: boolean) {
+    const filterClause = filterOptedOut ? " AND (\"optedOut\" = FALSE OR \"optedOut\" IS NULL)" : "";
+    const result = await sql`SELECT * FROM (SELECT * FROM people WHERE "churchId"=${churchId} AND removed=false${sql.raw(filterClause)} order by id desc limit 25) people ORDER BY "lastName", "firstName"`.execute(this.db);
+    return result.rows;
   }
 
-  public loadByHousehold(churchId: string, householdId: string) {
-    return TypedDB.query("SELECT * FROM people WHERE churchId=? and householdId=? AND removed=0;", [churchId, householdId]);
+  public async loadByHousehold(churchId: string, householdId: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("householdId", "=", householdId)
+      .where("removed", "=", false as any)
+      .execute();
   }
 
-  public search(churchId: string, term: string, filterOptedOut?: boolean) {
-    const filter = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
-    return TypedDB.query(
-      "SELECT * FROM people WHERE churchId=? AND concat(IFNULL(FirstName,''), ' ', IFNULL(MiddleName,''), ' ', IFNULL(NickName,''), ' ', IFNULL(LastName,''), ' ', IFNULL(donorNumber,'')) LIKE ? AND removed=0" +
-        filter +
-        " LIMIT 100;",
-      [churchId, "%" + term.replace(" ", "%") + "%"]
-    );
+  public async search(churchId: string, term: string, filterOptedOut?: boolean) {
+    const filterClause = filterOptedOut ? " AND (\"optedOut\" = FALSE OR \"optedOut\" IS NULL)" : "";
+    const searchTerm = "%" + term.replace(" ", "%") + "%";
+    const result = await sql`SELECT * FROM people WHERE "churchId"=${churchId} AND concat(COALESCE("firstName",''), ' ', COALESCE("middleName",''), ' ', COALESCE("nickName",''), ' ', COALESCE("lastName",''), ' ', COALESCE("donorNumber",'')) LIKE ${searchTerm} AND removed=false${sql.raw(filterClause)} LIMIT 100`.execute(this.db);
+    return result.rows;
   }
 
-  public searchPhone(churchId: string, phonestring: string) {
+  public async searchPhone(churchId: string, phonestring: string) {
     const phoneSearch = "%" + phonestring.replace(/ |-/g, "%") + "%";
-    return TypedDB.query(
-      "SELECT * FROM people WHERE churchId=? AND (REPLACE(REPLACE(HomePhone,'-',''), ' ', '') LIKE ? OR REPLACE(REPLACE(WorkPhone,'-',''), ' ', '') LIKE ? OR REPLACE(REPLACE(MobilePhone,'-',''), ' ', '') LIKE ?) AND removed=0 LIMIT 100;",
-      [churchId, phoneSearch, phoneSearch, phoneSearch]
-    );
+    const result = await sql`SELECT * FROM people WHERE "churchId"=${churchId} AND (REPLACE(REPLACE("homePhone",'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE("workPhone",'-',''), ' ', '') LIKE ${phoneSearch} OR REPLACE(REPLACE("mobilePhone",'-',''), ' ', '') LIKE ${phoneSearch}) AND removed=false LIMIT 100`.execute(this.db);
+    return result.rows;
   }
 
-  public searchEmail(churchId: string, email: string) {
-    return TypedDB.query("SELECT * FROM people WHERE churchId=? AND email like ? AND removed=0 LIMIT 100;", [churchId, "%" + email + "%"]);
+  public async searchEmail(churchId: string, email: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("email", "like", "%" + email + "%")
+      .where("removed", "=", false as any)
+      .limit(100)
+      .execute();
   }
 
-  public loadAttendees(churchId: string, campusId: string, serviceId: string, serviceTimeId: string, categoryName: string, groupId: string, startDate: Date, endDate: Date) {
-    const params = [];
-    params.push(churchId);
-    params.push(startDate);
-    params.push(endDate);
+  public async loadAttendees(churchId: string, campusId: string, serviceId: string, serviceTimeId: string, categoryName: string, groupId: string, startDate: Date, endDate: Date) {
+    let conditions = sql`p."churchId" = ${churchId} AND v."visitDate" BETWEEN ${startDate} AND ${endDate}`;
 
-    let sql =
-      "SELECT p.Id, p.churchId, p.displayName, p.firstName, p.lastName, p.photoUpdated" +
-      " FROM visitSessions vs" +
-      " INNER JOIN visits v on v.id = vs.visitId" +
-      " INNER JOIN sessions s on s.id = vs.sessionId" +
-      " INNER JOIN people p on p.id = v.personId" +
-      " INNER JOIN `groups` g on g.id = s.groupId" +
-      " LEFT OUTER JOIN serviceTimes st on st.id = s.serviceTimeId" +
-      " LEFT OUTER JOIN services ser on ser.id = st.serviceId" +
-      " WHERE p.churchId = ? AND v.visitDate BETWEEN ? AND ?";
+    if (!UniqueIdHelper.isMissing(campusId)) conditions = sql`${conditions} AND ser."campusId"=${campusId}`;
+    if (!UniqueIdHelper.isMissing(serviceId)) conditions = sql`${conditions} AND ser.id=${serviceId}`;
+    if (!UniqueIdHelper.isMissing(serviceTimeId)) conditions = sql`${conditions} AND st.id=${serviceTimeId}`;
+    if (categoryName !== "") conditions = sql`${conditions} AND g."categoryName"=${categoryName}`;
+    if (!UniqueIdHelper.isMissing(groupId)) conditions = sql`${conditions} AND g.id=${groupId}`;
 
-    if (!UniqueIdHelper.isMissing(campusId)) {
-      sql += " AND ser.campusId=?";
-      params.push(campusId);
-    }
-    if (!UniqueIdHelper.isMissing(serviceId)) {
-      sql += " AND ser.id=?";
-      params.push(serviceId);
-    }
-    if (!UniqueIdHelper.isMissing(serviceTimeId)) {
-      sql += " AND st.id=?";
-      params.push(serviceTimeId);
-    }
-    if (categoryName !== "") {
-      sql += " AND g.categoryName=?";
-      params.push(categoryName);
-    }
-    if (!UniqueIdHelper.isMissing(groupId)) {
-      sql += " AND g.id=?";
-      params.push(groupId);
-    }
-    sql += " GROUP BY p.id, p.displayName, p.firstName, p.lastName, p.photoUpdated";
-    sql += " ORDER BY p.lastName, p.firstName";
-    return TypedDB.query(sql, params);
+    const result = await sql`SELECT p.id, p."churchId", p."displayName", p."firstName", p."lastName", p."photoUpdated"
+      FROM "visitSessions" vs
+      INNER JOIN visits v on v.id = vs."visitId"
+      INNER JOIN sessions s on s.id = vs."sessionId"
+      INNER JOIN people p on p.id = v."personId"
+      INNER JOIN "groups" g on g.id = s."groupId"
+      LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
+      LEFT OUTER JOIN services ser on ser.id = st."serviceId"
+      WHERE ${conditions}
+      GROUP BY p.id, p."churchId", p."displayName", p."firstName", p."lastName", p."photoUpdated"
+      ORDER BY p."lastName", p."firstName"`.execute(this.db);
+    return result.rows;
   }
 
-  protected rowToModel(row: any): Person {
+  public convertToModel(_churchId: string, data: any): Person {
     const result: Person = {
       name: {
-        display: row.displayName,
-        first: row.firstName,
-        last: row.lastName,
-        middle: row.middleName,
-        nick: row.nickName,
-        prefix: row.prefix,
-        suffix: row.suffix
+        display: data.displayName,
+        first: data.firstName,
+        last: data.lastName,
+        middle: data.middleName,
+        nick: data.nickName,
+        prefix: data.prefix,
+        suffix: data.suffix
       },
       contactInfo: {
-        address1: row.address1,
-        address2: row.address2,
-        city: row.city,
-        state: row.state,
-        zip: row.zip,
-        homePhone: row.homePhone,
-        workPhone: row.workPhone,
-        email: row.email,
-        mobilePhone: row.mobilePhone
+        address1: data.address1,
+        address2: data.address2,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        homePhone: data.homePhone,
+        workPhone: data.workPhone,
+        email: data.email,
+        mobilePhone: data.mobilePhone
       },
-      photo: row.photo,
-      anniversary: row.anniversary,
-      birthDate: row.birthDate,
-      gender: row.gender,
-      householdId: row.householdId,
-      householdRole: row.householdRole,
-      maritalStatus: row.maritalStatus,
-      nametagNotes: row.nametagNotes,
-      donorNumber: row.donorNumber,
-      membershipStatus: row.membershipStatus,
-      photoUpdated: row.photoUpdated ? new Date(row.photoUpdated) : undefined,
-      id: row.id,
-      churchId: row.churchId,
-      importKey: row.importKey,
-      optedOut: row.optedOut,
-      conversationId: row.conversationId
+      photo: data.photo,
+      anniversary: data.anniversary,
+      birthDate: data.birthDate,
+      gender: data.gender,
+      householdId: data.householdId,
+      householdRole: data.householdRole,
+      maritalStatus: data.maritalStatus,
+      nametagNotes: data.nametagNotes,
+      donorNumber: data.donorNumber,
+      membershipStatus: data.membershipStatus,
+      photoUpdated: data.photoUpdated ? new Date(data.photoUpdated) : undefined,
+      id: data.id,
+      churchId: data.churchId,
+      importKey: data.importKey,
+      optedOut: data.optedOut,
+      conversationId: data.conversationId
     };
-    if (result.photo === undefined) result.photo = PersonHelper.getPhotoPath(row.churchId, result);
+    if (result.photo === undefined) result.photo = PersonHelper.getPhotoPath(data.churchId, result);
     return result;
   }
 
   public convertToModelWithPermissions(_churchId: string, data: any, canEdit: boolean) {
-    const result = this.rowToModel(data);
+    const result = this.convertToModel(_churchId, data);
     if (!canEdit) delete result.conversationId;
     return result;
   }

@@ -1,21 +1,19 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Automation } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class AutomationRepo extends ConfiguredRepo<Automation> {
-  protected get repoConfig(): RepoConfig<Automation> {
-    return {
-      tableName: "automations",
-      hasSoftDelete: false,
-      defaultOrderBy: "title",
-      columns: ["title", "recurs", "active"]
-    };
+export class AutomationRepo extends KyselyRepo {
+  protected readonly tableName = "automations";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public override async loadAll(churchId: string) {
+    return this.db.selectFrom("automations").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("title").execute();
   }
 
-  public loadAllChurches() {
-    return TypedDB.query("SELECT * FROM automations;", []);
+  public async loadAllChurches() {
+    return this.db.selectFrom("automations").selectAll().execute();
   }
 }

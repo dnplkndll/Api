@@ -1,40 +1,37 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Arrangement } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class ArrangementRepo extends ConfiguredRepo<Arrangement> {
-  protected get repoConfig(): RepoConfig<Arrangement> {
-    return {
-      tableName: "arrangements",
-      hasSoftDelete: false,
-      defaultOrderBy: "name",
-      columns: ["songId", "songDetailId", "name", "lyrics", "freeShowId"]
-    };
+export class ArrangementRepo extends KyselyRepo {
+  protected readonly tableName = "arrangements";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
+
+  public async loadAll(churchId: string) {
+    return this.db.selectFrom("arrangements").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("name")
+      .execute();
   }
 
-  public loadBySongId(churchId: string, songId: string) {
-    return TypedDB.query("SELECT * FROM arrangements where churchId=? and songId=?;", [churchId, songId]) as Promise<Arrangement[]>;
+  public async loadBySongId(churchId: string, songId: string) {
+    return this.db.selectFrom("arrangements").selectAll()
+      .where("churchId", "=", churchId)
+      .where("songId", "=", songId)
+      .execute();
   }
 
-  public loadBySongDetailId(churchId: string, songDetailId: string) {
-    return TypedDB.query("SELECT * FROM arrangements where churchId=? and songDetailId=?;", [churchId, songDetailId]);
+  public async loadBySongDetailId(churchId: string, songDetailId: string) {
+    return this.db.selectFrom("arrangements").selectAll()
+      .where("churchId", "=", churchId)
+      .where("songDetailId", "=", songDetailId)
+      .execute();
   }
 
-  public loadByFreeShowId(churchId: string, freeShowId: string) {
-    return TypedDB.queryOne("SELECT * FROM arrangements where churchId=? and freeShowId=?;", [churchId, freeShowId]);
-  }
-
-  protected rowToModel(row: any): Arrangement {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      songId: row.songId,
-      songDetailId: row.songDetailId,
-      name: row.name,
-      lyrics: row.lyrics,
-      freeShowId: row.freeShowId
-    };
+  public async loadByFreeShowId(churchId: string, freeShowId: string) {
+    return (await this.db.selectFrom("arrangements").selectAll()
+      .where("churchId", "=", churchId)
+      .where("freeShowId", "=", freeShowId)
+      .executeTakeFirst()) ?? null;
   }
 }

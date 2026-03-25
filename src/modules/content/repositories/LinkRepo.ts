@@ -1,8 +1,7 @@
 import { injectable } from "inversify";
 import { Link } from "../models/index.js";
 import { ArrayHelper, UniqueIdHelper } from "@churchapps/apihelper";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 const DEFAULT_B1TAB_LINKS: Partial<Link>[] = [
   { linkType: "bible", text: "Bible", icon: "menu_book", visibility: "everyone", sort: 1 },
@@ -18,31 +17,24 @@ const DEFAULT_B1TAB_LINKS: Partial<Link>[] = [
 ];
 
 @injectable()
-export class LinkRepo extends ConfiguredRepo<Link> {
-  protected get repoConfig(): RepoConfig<Link> {
-    return {
-      tableName: "links",
-      hasSoftDelete: false,
-      columns: [
-        "category", "url", "linkType", "linkData", "photo", "icon", "text", "sort", "parentId", "visibility", "groupIds"
-      ]
-    };
-  }
+export class LinkRepo extends KyselyRepo {
+  protected readonly tableName = "links";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-  public async loadAll(churchId: string): Promise<Link[]> {
-    return TypedDB.query("SELECT * FROM links WHERE churchId=? order by sort", [churchId]);
-  }
-
-  public async load(churchId: string, id: string): Promise<Link> {
-    return TypedDB.queryOne("SELECT * FROM links WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM links WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadAll(churchId: string) {
+    return this.db.selectFrom("links").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("sort")
+      .execute();
   }
 
   public async loadByCategory(churchId: string, category: string): Promise<Link[]> {
-    let links = await TypedDB.query<Link[]>("SELECT * FROM links WHERE churchId=? and category=? order by sort", [churchId, category]);
+    let links = await this.db.selectFrom("links").selectAll()
+      .where("churchId", "=", churchId)
+      .where("category", "=", category)
+      .orderBy("sort")
+      .execute() as Link[];
 
     // Create default b1Tab links if none exist
     if (category === "b1Tab" && links.length === 0) {
@@ -74,22 +66,26 @@ export class LinkRepo extends ConfiguredRepo<Link> {
         toSave.push(link);
       }
     });
-    const promises: Promise<Link>[] = [];
+    const promises: Promise<any>[] = [];
     toSave.forEach((link) => promises.push(this.save(link)));
     await Promise.all(promises);
   }
 
-  public loadById(id: string, churchId: string): Promise<Link> {
-    return TypedDB.queryOne("SELECT * FROM links WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadById(id: string, churchId: string) {
+    return (await this.db.selectFrom("links").selectAll()
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 
-  protected rowToModel(row: any): Link {
-    const result = { ...row };
+  public convertToModel(_churchId: string, data: any) {
+    if (!data) return null;
+    const result = { ...data };
     if (result.photo === undefined) {
       if (!result.photoUpdated) {
         result.photo = "";
       } else {
-        result.photo = "/" + result.churchId + "/b1/tabs/" + row.id + ".png?dt=" + row.photoUpdated.getTime().toString();
+        result.photo = "/" + result.churchId + "/b1/tabs/" + data.id + ".png?dt=" + data.photoUpdated.getTime().toString();
       }
     }
     return result;

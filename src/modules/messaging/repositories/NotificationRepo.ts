@@ -1,111 +1,129 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Notification } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { UniqueIdHelper } from "@churchapps/apihelper";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import { injectable } from "inversify";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
-export class NotificationRepo extends ConfiguredRepo<Notification> {
-  protected get repoConfig(): RepoConfig<Notification> {
-    return {
-      tableName: "notifications",
-      hasSoftDelete: false,
-      insertColumns: ["personId", "contentType", "contentId", "message", "link", "deliveryMethod", "triggeredByPersonId"],
-      updateColumns: ["contentType", "contentId", "isNew", "message", "link", "deliveryMethod", "triggeredByPersonId"],
-      insertLiterals: { timeSent: "NOW()", isNew: "1" }
-    };
-  }
-  public loadById(churchId: string, id: string) {
-    return TypedDB.queryOne("SELECT * FROM notifications WHERE id=? and churchId=?;", [id, churchId]);
+export class NotificationRepo extends KyselyRepo {
+  protected readonly tableName = "notifications";
+  protected readonly moduleName = "messaging";
+  protected readonly softDelete = false;
+
+  public async save(model: any) {
+    if (model.id) {
+      await this.db.updateTable("notifications").set({
+        contentType: model.contentType,
+        contentId: model.contentId,
+        isNew: model.isNew,
+        message: model.message,
+        link: model.link,
+        deliveryMethod: model.deliveryMethod,
+        triggeredByPersonId: model.triggeredByPersonId
+      }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await sql`INSERT INTO notifications (id, "churchId", "personId", "contentType", "contentId", message, link, "deliveryMethod", "triggeredByPersonId", "timeSent", "isNew") VALUES (${model.id}, ${model.churchId}, ${model.personId}, ${model.contentType}, ${model.contentId}, ${model.message}, ${model.link}, ${model.deliveryMethod}, ${model.triggeredByPersonId}, NOW(), true)`.execute(this.db);
+    }
+    return model;
   }
 
-  public loadByPersonId(churchId: string, personId: string) {
-    return TypedDB.query("SELECT * FROM notifications WHERE churchId=? AND personId=? ORDER BY timeSent DESC", [churchId, personId]);
+  public async loadById(churchId: string, id: string) {
+    return (await this.db.selectFrom("notifications").selectAll()
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 
-  public loadForEmail(frequency: string) {
-    const sql =
-      "SELECT DISTINCT n.churchId, n.personId" +
-      " FROM notifications n" +
-      " INNER JOIN notificationPreferences np on np.churchId=n.churchId and np.personId=n.personId" +
-      " WHERE n.deliveryMethod='email' AND np.emailFrequency=? AND n.timeSent>DATE_SUB(NOW(), INTERVAL 24 HOUR)" +
-      " LIMIT 200";
-    return TypedDB.query(sql, [frequency]);
+  public async loadByPersonId(churchId: string, personId: string) {
+    return this.db.selectFrom("notifications").selectAll()
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .orderBy("timeSent", "desc")
+      .execute();
   }
 
-  public loadByPersonIdForEmail(churchId: string, personId: string, frequency: string) {
-    let timeCutoff = "DATE_SUB(NOW(), INTERVAL 24 HOUR)";
-    if (frequency === "individual") timeCutoff = "DATE_SUB(NOW(), INTERVAL 30 MINUTE)";
-    const sql = "SELECT * FROM notifications WHERE churchId=? AND personId=? AND deliveryMethod='email' AND timeSent>=" + timeCutoff + " ORDER BY timeSent";
-    return TypedDB.query(sql, [churchId, personId]);
+  public async loadForEmail(frequency: string) {
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '24 hours'`
+      : sql`DATE_SUB(NOW(), INTERVAL 24 HOUR)`;
+    const result = await sql`SELECT DISTINCT n."churchId", n."personId" FROM notifications n INNER JOIN "notificationPreferences" np on np."churchId"=n."churchId" and np."personId"=n."personId" WHERE n."deliveryMethod"='email' AND np."emailFrequency"=${frequency} AND n."timeSent">${dateSub} LIMIT 200`.execute(this.db);
+    return result.rows as any[];
   }
 
-  public delete(churchId: string, id: string) {
-    return TypedDB.query("DELETE FROM notifications WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadByPersonIdForEmail(churchId: string, personId: string, frequency: string) {
+    let timeCutoff: ReturnType<typeof sql>;
+    if (frequency === "individual") {
+      timeCutoff = getDialect() === "postgres"
+        ? sql`NOW() - INTERVAL '30 minutes'`
+        : sql`DATE_SUB(NOW(), INTERVAL 30 MINUTE)`;
+    } else {
+      timeCutoff = getDialect() === "postgres"
+        ? sql`NOW() - INTERVAL '24 hours'`
+        : sql`DATE_SUB(NOW(), INTERVAL 24 HOUR)`;
+    }
+    const result = await sql`SELECT * FROM notifications WHERE "churchId"=${churchId} AND "personId"=${personId} AND "deliveryMethod"='email' AND "timeSent">=${timeCutoff} ORDER BY "timeSent"`.execute(this.db);
+    return result.rows as any[];
   }
 
   public async markRead(churchId: string, personId: string) {
-    const sql = "UPDATE notifications SET isNew=0, deliveryMethod='complete' WHERE churchId=? AND personId=?;";
-    const params = [churchId, personId];
-    await TypedDB.query(sql, params);
+    await this.db.updateTable("notifications")
+      .set({ isNew: false as any, deliveryMethod: "complete" })
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .execute();
   }
 
   public async markAllRead(churchId: string, personId: string) {
-    const sql = "UPDATE notifications SET isNew=0, deliveryMethod='complete' WHERE churchId=? AND personId=?;";
-    const params = [churchId, personId];
-    await TypedDB.query(sql, params);
+    await this.db.updateTable("notifications")
+      .set({ isNew: false as any, deliveryMethod: "complete" })
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .execute();
   }
 
-  public loadForPerson(churchId: string, personId: string) {
-    return TypedDB.query("SELECT * FROM notifications WHERE churchId=? AND personId=? ORDER BY timeSent DESC", [churchId, personId]);
+  public async loadForPerson(churchId: string, personId: string) {
+    return this.db.selectFrom("notifications").selectAll()
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .orderBy("timeSent", "desc")
+      .execute();
   }
 
   public async loadNewCounts(churchId: string, personId: string) {
-    const sql =
-      "SELECT (" +
-      "  SELECT COUNT(*) FROM notifications where churchId=? and personId=? and isNew=1" +
-      ") AS notificationCount, (" +
-      "  SELECT COUNT(*) FROM privateMessages where churchId=? and notifyPersonId=?" +
-      ") AS pmCount";
-    const result: any = await TypedDB.queryOne(sql, [churchId, personId, churchId, personId]);
-    return result.rows || result || {};
+    const result = await sql`SELECT (SELECT COUNT(*) FROM notifications where "churchId"=${churchId} and "personId"=${personId} and "isNew"=true) AS "notificationCount", (SELECT COUNT(*) FROM "privateMessages" where "churchId"=${churchId} and "notifyPersonId"=${personId}) AS "pmCount"`.execute(this.db);
+    const row = (result.rows as any[])[0];
+    return row || {};
   }
 
-  protected rowToModel(data: any): Notification {
-    return {
-      id: data.id,
-      churchId: data.churchId,
-      personId: data.personId,
-      contentType: data.contentType,
-      contentId: data.contentId,
-      timeSent: data.timeSent,
-      isNew: data.isNew,
-      message: data.message,
-      link: data.link,
-      deliveryMethod: data.deliveryMethod,
-      triggeredByPersonId: data.triggeredByPersonId
-    };
+  public async loadUndelivered() {
+    return this.db.selectFrom("notifications").selectAll()
+      .where("isNew", "=", true as any)
+      .where((eb) =>
+        eb.or([
+          eb("deliveryMethod", "is", null),
+          eb("deliveryMethod", "=", ""),
+          eb("deliveryMethod", "=", "push"),
+          eb("deliveryMethod", "=", "socket"),
+          eb("deliveryMethod", "=", "email")
+        ])
+      )
+      .execute();
   }
 
-  public convertToModel(data: any) {
-    return this.rowToModel(data);
+  public async loadExistingUnread(churchId: string, contentType: string, contentId: string) {
+    return this.db.selectFrom("notifications").selectAll()
+      .where("churchId", "=", churchId)
+      .where("contentType", "=", contentType)
+      .where("contentId", "=", contentId)
+      .where("isNew", "=", true as any)
+      .execute();
   }
 
-  public convertAllToModel(data: any) {
-    return this.mapToModels(data);
-  }
-
-  public loadUndelivered() {
-    const sql = "SELECT * FROM notifications WHERE isNew=1 AND (deliveryMethod IS NULL OR deliveryMethod='' OR deliveryMethod='push' OR deliveryMethod='socket' OR deliveryMethod='email')";
-    return TypedDB.query(sql, []);
-  }
-
-  public loadExistingUnread(churchId: string, contentType: string, contentId: string) {
-    const sql = "SELECT * FROM notifications WHERE churchId=? AND contentType=? AND contentId=? AND isNew=1";
-    return TypedDB.query(sql, [churchId, contentType, contentId]);
-  }
-
-  public loadPendingEscalation() {
-    const sql = "SELECT * FROM notifications WHERE isNew=1 AND deliveryMethod IN ('socket', 'push')";
-    return TypedDB.query(sql, []);
+  public async loadPendingEscalation() {
+    return this.db.selectFrom("notifications").selectAll()
+      .where("isNew", "=", true as any)
+      .where("deliveryMethod", "in", ["socket", "push"])
+      .execute();
   }
 }

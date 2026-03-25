@@ -1,29 +1,16 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Page } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class PageRepo extends ConfiguredRepo<Page> {
-  protected get repoConfig(): RepoConfig<Page> {
-    return {
-      tableName: "pages",
-      hasSoftDelete: false,
-      columns: ["url", "title", "layout"]
-    };
-  }
+export class PageRepo extends KyselyRepo {
+  protected readonly tableName = "pages";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-  public loadByUrl(churchId: string, url: string) {
-    return TypedDB.queryOne("SELECT * FROM pages WHERE url=? AND churchId=?;", [url, churchId]);
-  }
-
-  protected rowToModel(row: any): Page {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      url: row.url,
-      title: row.title,
-      layout: row.layout
-    };
+  public async loadByUrl(churchId: string, url: string) {
+    return (await this.db.selectFrom("pages").selectAll()
+      .where("url", "=", url)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 }

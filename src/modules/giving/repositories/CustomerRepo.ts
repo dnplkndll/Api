@@ -1,92 +1,66 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Customer } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class CustomerRepo extends ConfiguredRepo<Customer> {
-  protected get repoConfig(): RepoConfig<Customer> {
-    return {
-      tableName: "customers",
-      hasSoftDelete: false,
-      idColumn: "id", // Note: Customer uses external ID, not auto-generated
-      columns: ["personId", "provider", "metadata"]
-    };
-  }
+export class CustomerRepo extends KyselyRepo {
+  protected readonly tableName = "customers";
+  protected readonly moduleName = "giving";
+  protected readonly softDelete = false;
 
-  // Override create to use the external ID provided
-  protected async create(model: Customer): Promise<Customer> {
-    // Customer ID comes from external system, don't auto-generate
-    const sql = "INSERT INTO customers (id, churchId, personId, provider, metadata) VALUES (?, ?, ?, ?, ?);";
-    const provider = model.provider ?? "stripe";
-    const metadata = model.metadata ? JSON.stringify(model.metadata) : null;
-    const params = [model.id, model.churchId, model.personId, provider, metadata];
-    await TypedDB.query(sql, params);
-    return model;
-  }
-
-  // Override save method to handle external IDs properly
-  public async save(model: Customer): Promise<Customer> {
-    // Check if customer already exists in database
-    const existing = await this.loadByPersonId(model.churchId!, model.personId!);
+  // Customer ID comes from external system, don't auto-generate on insert
+  public override async save(model: any) {
+    const existing = await this.loadByPersonId(model.churchId, model.personId);
 
     if (existing) {
-      // Customer exists - update with new Stripe customer ID if provided
-      const oldId = existing.id;
-      const newId = model.id || existing.id;
+      const oldId = (existing as any).id;
+      const newId = model.id || oldId;
 
-      // If the customer ID changed (new Stripe customer), we need to update the primary key
       if (newId !== oldId) {
-        // Delete old record and create new one with new ID
-        await this.delete(model.churchId!, oldId!);
-        return await this.create(model);
+        await this.delete(model.churchId, oldId);
+        return this.createWithExternalId(model);
       } else {
-        // Same ID, just update other fields
-        model.id = existing.id;
-        return await this.update(model);
+        model.id = oldId;
+        const metadata = model.metadata ? JSON.stringify(model.metadata) : null;
+        await this.db.updateTable("customers")
+          .set({ personId: model.personId, provider: model.provider ?? "stripe", metadata })
+          .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+        return model;
       }
     } else {
-      // Customer doesn't exist, create it
-      return await this.create(model);
+      return this.createWithExternalId(model);
     }
   }
 
-  // Override update since we likely won't update customers
-  protected async update(model: Customer): Promise<Customer> {
-    // Customers typically don't get updated, but provide implementation for completeness
-    const sql = "UPDATE customers SET personId=?, provider=?, metadata=? WHERE id=? AND churchId=?";
+  private async createWithExternalId(model: any) {
     const provider = model.provider ?? "stripe";
     const metadata = model.metadata ? JSON.stringify(model.metadata) : null;
-    const params = [model.personId, provider, metadata, model.id, model.churchId];
-    await TypedDB.query(sql, params);
+    await this.db.insertInto("customers")
+      .values({ id: model.id, churchId: model.churchId, personId: model.personId, provider, metadata })
+      .execute();
     return model;
   }
 
-  public async delete(churchId: string, id: string): Promise<void> {
-    await TypedDB.query("DELETE FROM customers WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
   public async loadByPersonId(churchId: string, personId: string) {
-    const row = await TypedDB.queryOne("SELECT * FROM customers WHERE personId=? AND churchId=?;", [personId, churchId]);
-    return row ? this.rowToModel(row) : null;
+    const row = await this.db.selectFrom("customers").selectAll()
+      .where("personId", "=", personId).where("churchId", "=", churchId)
+      .executeTakeFirst() ?? null;
+    return row ? this.convertToModel(churchId, row) : null;
   }
 
   public async loadByPersonAndProvider(churchId: string, personId: string, provider: string) {
-    const row = await TypedDB.queryOne(
-      "SELECT * FROM customers WHERE personId=? AND churchId=? AND provider=?;",
-      [personId, churchId, provider]
-    );
-    return row ? this.rowToModel(row) : null;
+    const row = await this.db.selectFrom("customers").selectAll()
+      .where("personId", "=", personId).where("churchId", "=", churchId).where("provider", "=", provider)
+      .executeTakeFirst() ?? null;
+    return row ? this.convertToModel(churchId, row) : null;
   }
 
-  protected rowToModel(row: any): Customer {
+  public convertToModel(_churchId: string, data: any) {
     return {
-      id: row.id,
-      churchId: row.churchId,
-      personId: row.personId,
-      provider: row.provider,
-      metadata: this.parseJson(row.metadata)
+      id: data.id,
+      churchId: data.churchId,
+      personId: data.personId,
+      provider: data.provider,
+      metadata: this.parseJson(data.metadata)
     };
   }
 

@@ -1,30 +1,22 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Household } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class HouseholdRepo extends ConfiguredRepo<Household> {
-  protected get repoConfig(): RepoConfig<Household> {
-    return {
-      tableName: "households",
-      hasSoftDelete: false,
-      columns: ["name"]
-    };
+export class HouseholdRepo extends KyselyRepo {
+  protected readonly tableName = "households";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async deleteUnused(churchId: string) {
+    await sql`DELETE FROM households WHERE "churchId"=${churchId} AND id not in (SELECT "householdId" FROM people WHERE "churchId"=${churchId} AND "householdId" IS NOT NULL group by "householdId")`.execute(this.db);
   }
 
-  public deleteUnused(churchId: string) {
-    return TypedDB.query("DELETE FROM households WHERE churchId=? AND id not in (SELECT householdId FROM people WHERE churchId=? AND householdId IS NOT NULL group by householdId)", [
-      churchId,
-      churchId
-    ]);
-  }
-
-  protected rowToModel(row: any): Household {
+  public convertToModel(_churchId: string, data: any) {
     return {
-      id: row.id,
-      churchId: row.churchId,
-      name: row.name
+      id: data.id,
+      churchId: data.churchId,
+      name: data.name
     };
   }
 }

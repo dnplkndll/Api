@@ -1,84 +1,62 @@
 import { injectable } from "inversify";
-import { DateHelper } from "@churchapps/apihelper";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { StreamingService } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { DateHelper, UniqueIdHelper } from "@churchapps/apihelper";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
-export class StreamingServiceRepo extends ConfiguredRepo<StreamingService> {
-  protected get repoConfig(): RepoConfig<StreamingService> {
-    return {
-      tableName: "streamingServices",
-      hasSoftDelete: false,
-      columns: [
-        "serviceTime", "earlyStart", "chatBefore", "chatAfter", "provider", "providerKey", "videoUrl", "timezoneOffset", "recurring", "label", "sermonId"
-      ]
-    };
-  }
+export class StreamingServiceRepo extends KyselyRepo {
+  protected readonly tableName = "streamingServices";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-  // Override to use TypedDB and handle date conversion
-  protected async create(service: StreamingService): Promise<StreamingService> {
-    const m: any = service as any;
-    if (!m[this.idColumn]) m[this.idColumn] = this.createId();
+  public async save(model: any) {
+    if (model.serviceTime) model.serviceTime = DateHelper.toMysqlDate(model.serviceTime);
 
-    // Convert serviceTime to MySQL format for database insertion
-    const serviceTime = DateHelper.toMysqlDate(service.serviceTime);
-    const modifiedService = { ...service, serviceTime } as any;
-
-    const { sql, params } = this.buildInsert(modifiedService);
-    await TypedDB.query(sql, params);
-    return service;
-  }
-
-  protected async update(service: StreamingService): Promise<StreamingService> {
-    // Convert serviceTime to MySQL format for database update
-    const serviceTime = DateHelper.toMysqlDate(service.serviceTime);
-    const modifiedService = { ...service, serviceTime } as any;
-
-    const { sql, params } = this.buildUpdate(modifiedService);
-    await TypedDB.query(sql, params);
-    return service;
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable("streamingServices").set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await this.db.insertInto("streamingServices").values(model).execute();
+    }
+    return model;
   }
 
   public async delete(id: string, churchId: string): Promise<any> {
-    return TypedDB.query("DELETE FROM streamingServices WHERE id=? AND churchId=?;", [id, churchId]);
+    await this.db.deleteFrom("streamingServices")
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .execute();
   }
 
-  public async load(churchId: string, id: string): Promise<StreamingService> {
-    return TypedDB.queryOne("SELECT * FROM streamingServices WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadAll(churchId: string): Promise<any[]> {
+    return this.db.selectFrom("streamingServices").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("serviceTime")
+      .execute();
   }
 
-  public async loadAll(churchId: string): Promise<StreamingService[]> {
-    return TypedDB.query("SELECT * FROM streamingServices WHERE churchId=? ORDER BY serviceTime;", [churchId]);
+  public async loadById(id: string, churchId: string) {
+    return (await this.db.selectFrom("streamingServices").selectAll()
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 
-  public loadById(id: string, churchId: string): Promise<StreamingService> {
-    return TypedDB.queryOne("SELECT * FROM streamingServices WHERE id=? AND churchId=?;", [id, churchId]);
+  public async loadAllRecurring() {
+    return this.db.selectFrom("streamingServices").selectAll()
+      .where("recurring", "=", true as any)
+      .orderBy("serviceTime")
+      .execute();
   }
 
-  public loadAllRecurring(): Promise<StreamingService[]> {
-    return TypedDB.query("SELECT * FROM streamingServices WHERE recurring=1 ORDER BY serviceTime;", []);
-  }
-
-  public async advanceRecurringServices(): Promise<void> {
-    await TypedDB.query("UPDATE streamingServices SET serviceTime = DATE_ADD(serviceTime, INTERVAL CEIL(TIMESTAMPDIFF(DAY, serviceTime, DATE_ADD(NOW(), INTERVAL 6 HOUR)) / 7) * 7 DAY) WHERE recurring = 1 AND serviceTime < DATE_SUB(NOW(), INTERVAL 6 HOUR)", []);
-  }
-
-  protected rowToModel(row: any): StreamingService {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      serviceTime: row.serviceTime,
-      earlyStart: row.earlyStart,
-      chatBefore: row.chatBefore,
-      chatAfter: row.chatAfter,
-      provider: row.provider,
-      providerKey: row.providerKey,
-      videoUrl: row.videoUrl,
-      timezoneOffset: row.timezoneOffset,
-      recurring: row.recurring,
-      label: row.label,
-      sermonId: row.sermonId
-    };
+  public async advanceRecurringServices() {
+    if (getDialect() === "postgres") {
+      await sql`UPDATE "streamingServices" SET "serviceTime" = "serviceTime" + (CEIL(EXTRACT(EPOCH FROM (NOW() + INTERVAL '6 hours' - "serviceTime")) / 86400 / 7) * 7) * INTERVAL '1 day' WHERE recurring = true AND "serviceTime" < NOW() - INTERVAL '6 hours'`.execute(this.db);
+    } else {
+      await sql`UPDATE "streamingServices" SET "serviceTime" = DATE_ADD("serviceTime", INTERVAL CEIL(TIMESTAMPDIFF(DAY, "serviceTime", DATE_ADD(NOW(), INTERVAL 6 HOUR)) / 7) * 7 DAY) WHERE recurring = true AND "serviceTime" < DATE_SUB(NOW(), INTERVAL 6 HOUR)`.execute(this.db);
+    }
   }
 }

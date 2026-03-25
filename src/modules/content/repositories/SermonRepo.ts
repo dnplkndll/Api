@@ -1,87 +1,48 @@
-import { DateHelper } from "@churchapps/apihelper";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Sermon } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { DateHelper, UniqueIdHelper } from "@churchapps/apihelper";
+import { sql } from "kysely";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import { injectable } from "inversify";
 
 @injectable()
-export class SermonRepo extends ConfiguredRepo<Sermon> {
-  protected get repoConfig(): RepoConfig<Sermon> {
-    return {
-      tableName: "sermons",
-      hasSoftDelete: false,
-      columns: [
-        "playlistId", "videoType", "videoData", "videoUrl", "title", "description", "publishDate", "thumbnail", "duration", "permanentUrl"
-      ]
-    };
-  }
+export class SermonRepo extends KyselyRepo {
+  protected readonly tableName = "sermons";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
 
-  // Override to use TypedDB instead of DB
-  protected async create(model: Sermon): Promise<Sermon> {
-    const m: any = model as any;
-    if (!m[this.idColumn]) m[this.idColumn] = this.createId();
-    // Convert publishDate before insert
-    if (m.publishDate) {
-      m.publishDate = DateHelper.toMysqlDate(m.publishDate);
+  public async save(model: any) {
+    if (model.publishDate) model.publishDate = DateHelper.toMysqlDate(model.publishDate);
+
+    if (model.id) {
+      const { id: _id, churchId: _cid, ...setData } = model;
+      await this.db.updateTable("sermons").set(setData)
+        .where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await this.db.insertInto("sermons").values(model).execute();
     }
-    const { sql, params } = this.buildInsert(model);
-    await TypedDB.query(sql, params);
     return model;
   }
 
-  protected async update(model: Sermon): Promise<Sermon> {
-    const m: any = model as any;
-    // Convert publishDate before update
-    if (m.publishDate) {
-      m.publishDate = DateHelper.toMysqlDate(m.publishDate);
-    }
-    const { sql, params } = this.buildUpdate(model);
-    await TypedDB.query(sql, params);
-    return model;
+  public async loadAll(churchId: string): Promise<any[]> {
+    return this.db.selectFrom("sermons").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("publishDate", "desc")
+      .execute();
   }
 
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM sermons WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  public async load(churchId: string, id: string): Promise<Sermon> {
-    return TypedDB.queryOne("SELECT * FROM sermons WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  public loadById(id: string, churchId: string): Promise<Sermon> {
+  public loadById(id: string, churchId: string) {
     return this.load(churchId, id);
   }
 
-  public async loadAll(churchId: string): Promise<Sermon[]> {
-    return TypedDB.query("SELECT * FROM sermons WHERE churchId=? ORDER BY publishDate desc;", [churchId]);
-  }
-
-  public loadPublicAll(churchId: string): Promise<Sermon[]> {
-    return TypedDB.query("SELECT * FROM sermons WHERE churchId=? ORDER BY publishDate desc;", [churchId]);
+  public async loadPublicAll(churchId: string) {
+    return this.db.selectFrom("sermons").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("publishDate", "desc")
+      .execute();
   }
 
   public async loadTimeline(sermonIds: string[]) {
-    const sql = "select 'sermon' as postType, id as postId, title, description, thumbnail" + " from sermons" + " where id in (?)";
-
-    const params = [sermonIds];
-    const result = await TypedDB.query(sql, params);
-    return result;
-  }
-
-  protected rowToModel(row: any): Sermon {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      playlistId: row.playlistId,
-      videoType: row.videoType,
-      videoData: row.videoData,
-      videoUrl: row.videoUrl,
-      title: row.title,
-      description: row.description,
-      publishDate: row.publishDate,
-      thumbnail: row.thumbnail,
-      duration: row.duration,
-      permanentUrl: row.permanentUrl
-    };
+    const result = await sql`select 'sermon' as "postType", id as "postId", title, description, thumbnail from sermons where id in (${sql.join(sermonIds)})`.execute(this.db);
+    return result.rows as any[];
   }
 }

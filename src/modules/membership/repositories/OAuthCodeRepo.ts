@@ -1,47 +1,52 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { OAuthCode } from "../models/index.js";
-import { DateHelper } from "../helpers/index.js";
-import { BaseRepo } from "../../../shared/infrastructure/BaseRepo.js";
 import { injectable } from "inversify";
+import { sql } from "kysely";
+import { DateHelper } from "../helpers/index.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class OAuthCodeRepo extends BaseRepo<OAuthCode> {
-  protected tableName = "oAuthCodes";
-  protected hasSoftDelete = false;
-  protected async create(authCode: OAuthCode): Promise<OAuthCode> {
-    authCode.id = this.createId();
-    const expiresAt = DateHelper.toMysqlDate(authCode.expiresAt);
-    const sql = "INSERT INTO oAuthCodes (id, code, clientId, userChurchId, redirectUri, scopes, expiresAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW());";
-    const params = [authCode.id, authCode.code, authCode.clientId, authCode.userChurchId, authCode.redirectUri, authCode.scopes, expiresAt];
-    await TypedDB.query(sql, params);
-    return authCode;
+export class OAuthCodeRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "oAuthCodes";
+  protected readonly moduleName = "membership";
+
+  public async save(model: any) {
+    const expiresAt = DateHelper.toMysqlDate(model.expiresAt);
+    if (model.id) {
+      await this.db.updateTable(this.tableName).set({
+        code: model.code,
+        clientId: model.clientId,
+        userChurchId: model.userChurchId,
+        redirectUri: model.redirectUri,
+        scopes: model.scopes,
+        expiresAt
+      } as any).where("id", "=", model.id).execute();
+    } else {
+      model.id = this.createId();
+      await sql`INSERT INTO "oAuthCodes" (id, code, "clientId", "userChurchId", "redirectUri", scopes, "expiresAt", "createdAt") VALUES (${model.id}, ${model.code}, ${model.clientId}, ${model.userChurchId}, ${model.redirectUri}, ${model.scopes}, ${expiresAt}, NOW())`.execute(this.db);
+    }
+    return model;
   }
 
-  protected async update(authCode: OAuthCode): Promise<OAuthCode> {
-    const expiresAt = DateHelper.toMysqlDate(authCode.expiresAt);
-    const sql = "UPDATE oAuthCodes SET code=?, clientId=?, userChurchId=?, redirectUri=?, scopes=?, expiresAt=? WHERE id=?;";
-    const params = [authCode.code, authCode.clientId, authCode.userChurchId, authCode.redirectUri, authCode.scopes, expiresAt, authCode.id];
-    await TypedDB.query(sql, params);
-    return authCode;
+  public async load(id: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "=", id).executeTakeFirst() ?? null;
   }
 
-  public load(id: string): Promise<OAuthCode> {
-    return TypedDB.queryOne("SELECT * FROM oAuthCodes WHERE id=?", [id]);
+  public async loadByCode(code: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("code", "=", code).executeTakeFirst() ?? null;
   }
 
-  public loadByCode(code: string): Promise<OAuthCode> {
-    return TypedDB.queryOne("SELECT * FROM oAuthCodes WHERE code=?", [code]);
+  public async delete(id: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("id", "=", id).execute();
   }
 
-  public delete(id: string) {
-    return TypedDB.query("DELETE FROM oAuthCodes WHERE id=?", [id]);
+  public async deleteByCode(code: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("code", "=", code).execute();
   }
 
-  public deleteByCode(code: string) {
-    return TypedDB.query("DELETE FROM oAuthCodes WHERE code=?", [code]);
-  }
-
-  public deleteExpired() {
-    return TypedDB.query("DELETE FROM oAuthCodes WHERE expiresAt < NOW()", []);
+  public async deleteExpired() {
+    await sql`DELETE FROM "oAuthCodes" WHERE "expiresAt" < NOW()`.execute(this.db);
   }
 }

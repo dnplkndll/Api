@@ -1,13 +1,15 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { CollectionHelper } from "../../../shared/helpers/index.js";
+import { sql } from "kysely";
 import { SubscriptionFund } from "../models/index.js";
 import { FundRepo } from "./FundRepo.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class SubscriptionFundsRepo extends ConfiguredRepo<SubscriptionFund> {
+export class SubscriptionFundsRepo extends KyselyRepo {
+  protected readonly tableName = "subscriptionFunds";
+  protected readonly moduleName = "giving";
+  protected readonly softDelete = false;
+
   private fundRepository: FundRepo;
 
   constructor() {
@@ -15,41 +17,36 @@ export class SubscriptionFundsRepo extends ConfiguredRepo<SubscriptionFund> {
     this.fundRepository = new FundRepo();
   }
 
-  protected get repoConfig(): RepoConfig<SubscriptionFund> {
-    return {
-      tableName: "subscriptionFunds",
-      hasSoftDelete: false,
-      columns: ["subscriptionId", "fundId", "amount"]
-    };
-  }
-
   public async deleteBySubscriptionId(churchId: string, subscriptionId: string) {
-    return TypedDB.query("DELETE FROM subscriptionFunds WHERE subscriptionId=? AND churchId=?;", [subscriptionId, churchId]);
+    await this.db.deleteFrom("subscriptionFunds")
+      .where("subscriptionId", "=", subscriptionId).where("churchId", "=", churchId).execute();
   }
 
-  public loadBySubscriptionId(churchId: string, subscriptionId: string) {
-    const sql =
-      "SELECT subscriptionFunds.*, funds.name FROM subscriptionFunds" +
-      " LEFT JOIN funds ON subscriptionFunds.fundId = funds.id" +
-      " WHERE subscriptionFunds.churchId=? AND subscriptionFunds.subscriptionId=?";
-    return TypedDB.query(sql, [churchId, subscriptionId]);
+  public async loadBySubscriptionId(churchId: string, subscriptionId: string) {
+    const result = await sql`
+      SELECT "subscriptionFunds".*, funds.name FROM "subscriptionFunds"
+      LEFT JOIN funds ON "subscriptionFunds"."fundId" = funds.id
+      WHERE "subscriptionFunds"."churchId"=${churchId} AND "subscriptionFunds"."subscriptionId"=${subscriptionId}
+    `.execute(this.db);
+    return result.rows;
   }
 
   // If the fund gets deleted for a recurring donation, the donations will go to '(General Fund)'
   public async loadForSubscriptionLog(churchId: string, subscriptionId: string) {
     let result;
-    const sql =
-      "SELECT subscriptionFunds.*, funds.name, funds.removed FROM subscriptionFunds" +
-      " LEFT JOIN funds ON subscriptionFunds.fundId = funds.id" +
-      " WHERE subscriptionFunds.churchId=? AND subscriptionFunds.subscriptionId=?";
-    const subscriptionFund = await TypedDB.query(sql, [churchId, subscriptionId]);
+    const queryResult = await sql`
+      SELECT "subscriptionFunds".*, funds.name, funds.removed FROM "subscriptionFunds"
+      LEFT JOIN funds ON "subscriptionFunds"."fundId" = funds.id
+      WHERE "subscriptionFunds"."churchId"=${churchId} AND "subscriptionFunds"."subscriptionId"=${subscriptionId}
+    `.execute(this.db);
+    const subscriptionFund = queryResult.rows as any[];
     if (subscriptionFund && subscriptionFund[0] && subscriptionFund[0].removed === false) {
-      const { removed: _removed, ...sf } = (subscriptionFund as any)[0];
+      const { removed: _removed, ...sf } = subscriptionFund[0];
       result = [sf];
     } else if (subscriptionFund && subscriptionFund[0]) {
       // Fund was deleted, use general fund instead
       const generalFund = await this.fundRepository.getOrCreateGeneral(churchId);
-      const { removed: _removed, ...sf } = (subscriptionFund as any)[0];
+      const { removed: _removed, ...sf } = subscriptionFund[0];
       sf.fundId = generalFund.id;
       sf.name = generalFund.name;
       result = [sf];
@@ -60,18 +57,13 @@ export class SubscriptionFundsRepo extends ConfiguredRepo<SubscriptionFund> {
     return result;
   }
 
-  public convertToModel(churchId: string, data: any) {
-    const result: SubscriptionFund = {
+  public convertToModel(churchId: string, data: any): SubscriptionFund {
+    return {
       id: data.id,
       churchId,
       subscriptionId: data.subscriptionId,
       fundId: data.fundId,
       amount: data.amount
     };
-    return result;
-  }
-
-  public convertAllToModel(churchId: string, data: any) {
-    return CollectionHelper.convertAll<SubscriptionFund>(data, (d: any) => this.convertToModel(churchId, d));
   }
 }

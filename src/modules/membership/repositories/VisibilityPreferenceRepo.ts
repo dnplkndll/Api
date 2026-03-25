@@ -1,32 +1,27 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { VisibilityPreference } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class VisibilityPreferenceRepo extends ConfiguredRepo<VisibilityPreference> {
-  protected get repoConfig(): RepoConfig<VisibilityPreference> {
-    return {
-      tableName: "visibilityPreferences",
-      hasSoftDelete: false,
-      columns: ["personId", "address", "phoneNumber", "email"]
-    };
+export class VisibilityPreferenceRepo extends KyselyRepo {
+  protected readonly tableName = "visibilityPreferences";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async loadForPerson(churchId: string, personId: string): Promise<any> {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", churchId)
+      .where("personId", "=", personId)
+      .executeTakeFirst() ?? null;
   }
 
-  public async loadForPerson(churchId: string, personId: string) {
-    const sql = "SELECT * FROM visibilityPreferences WHERE churchId=? AND personId=?;";
-    return TypedDB.query(sql, [churchId, personId]);
-  }
-
-  protected rowToModel(row: any): VisibilityPreference {
+  public convertToModel(_churchId: string, data: any) {
     return {
-      id: row.id,
-      churchId: row.churchId,
-      personId: row.personId,
-      address: row.address,
-      phoneNumber: row.phoneNumber,
-      email: row.email
+      id: data.id,
+      churchId: data.churchId,
+      personId: data.personId,
+      address: data.address,
+      phoneNumber: data.phoneNumber,
+      email: data.email
     };
   }
 }

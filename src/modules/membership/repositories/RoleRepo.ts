@@ -1,43 +1,43 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Role } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
 import { injectable } from "inversify";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class RoleRepo extends ConfiguredRepo<Role> {
-  protected get repoConfig(): RepoConfig<Role> {
+export class RoleRepo extends KyselyRepo {
+  protected readonly tableName = "roles";
+  protected readonly moduleName = "membership";
+  protected readonly softDelete = false;
+
+  public async loadByIds(ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "in", ids)
+      .execute();
+  }
+
+  public async loadAll(churchId?: string) {
+    if (churchId) {
+      return this.db.selectFrom(this.tableName).selectAll()
+        .where("churchId", "=", churchId)
+        .execute();
+    }
+    return this.db.selectFrom(this.tableName).selectAll().execute();
+  }
+
+  public async loadByChurchId(id: string) {
+    return this.db.selectFrom(this.tableName).selectAll()
+      .where("churchId", "=", id)
+      .execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "roles",
-      hasSoftDelete: false,
-      columns: ["name"]
+      id: data.id,
+      churchId: data.churchId,
+      name: data.name
     };
   }
 
-  public loadByIds(ids: string[]) {
-    return TypedDB.query("SELECT * FROM roles WHERE id IN (?)", [ids]).then((rows: Role[]) => {
-      return rows;
-    });
-  }
-
-  public loadAll() {
-    return TypedDB.query("SELECT * FROM roles", []).then((rows: Role[]) => {
-      return rows;
-    });
-  }
-
-  public loadByChurchId(id: string) {
-    return TypedDB.query("SELECT * FROM roles WHERE churchId=?", [id]).then((rows: Role[]) => rows);
-  }
-
-  protected rowToModel(row: any): Role {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      name: row.name
-    };
-  }
-
-  public loadById(churchId: string, id: string): Promise<Role> {
-    return this.loadOne(churchId, id) as Promise<Role>;
+  public async loadById(churchId: string, id: string) {
+    return this.loadOne(churchId, id);
   }
 }

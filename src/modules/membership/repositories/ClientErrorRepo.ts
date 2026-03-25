@@ -1,42 +1,52 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ClientError } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
+import { getDialect } from "../../../db/index.js";
 
 @injectable()
-export class ClientErrorRepo extends ConfiguredRepo<ClientError> {
-  protected get repoConfig(): RepoConfig<ClientError> {
+export class ClientErrorRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "clientErrors";
+  protected readonly moduleName = "membership";
+
+  public async save(model: any) {
+    if (model.id) {
+      const { id: _id, ...setData } = model;
+      await this.db.updateTable(this.tableName).set(setData)
+        .where("id", "=", model.id).execute();
+    } else {
+      model.id = this.createId();
+      await this.db.insertInto(this.tableName).values(model).execute();
+    }
+    return model;
+  }
+
+  public async deleteOld() {
+    const dateSub = getDialect() === "postgres"
+      ? sql`NOW() - INTERVAL '7 days'`
+      : sql`date_add(NOW(), INTERVAL -7 DAY)`;
+    await sql`DELETE FROM "clientErrors" WHERE "errorTime"<${dateSub}`.execute(this.db);
+  }
+
+  public async load(id: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "=", id).executeTakeFirst() ?? null;
+  }
+
+  public async loadAll() {
+    return this.db.selectFrom(this.tableName).selectAll().execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "clientErrors",
-      hasSoftDelete: false,
-      columns: ["application", "errorTime", "userId", "originUrl", "errorType", "message", "details"]
-    };
-  }
-
-  public deleteOld() {
-    return TypedDB.query("DELETE FROM clientErrors WHERE errorTime<date_add(NOW(), INTERVAL -7 DAY)", []);
-  }
-
-  public load(id: string) {
-    return TypedDB.queryOne("SELECT * FROM clientErrors WHERE id=?;", [id]);
-  }
-
-  public loadAll() {
-    return TypedDB.query("SELECT * FROM clientErrors;", []);
-  }
-
-  protected rowToModel(row: any): ClientError {
-    return {
-      id: row.id,
-      application: row.application,
-      errorTime: row.errorTime,
-      userId: row.userId,
-      churchId: row.churchId,
-      originUrl: row.originUrl,
-      errorType: row.errorType,
-      message: row.message,
-      details: row.details
+      id: data.id,
+      application: data.application,
+      errorTime: data.errorTime,
+      userId: data.userId,
+      churchId: data.churchId,
+      originUrl: data.originUrl,
+      errorType: data.errorType,
+      message: data.message,
+      details: data.details
     };
   }
 }

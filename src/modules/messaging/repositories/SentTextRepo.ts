@@ -1,48 +1,39 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { SentText } from "../models/index.js";
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { sql } from "kysely";
+import { UniqueIdHelper } from "@churchapps/apihelper";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import { injectable } from "inversify";
 
 @injectable()
-export class SentTextRepo extends ConfiguredRepo<SentText> {
-  protected get repoConfig(): RepoConfig<SentText> {
-    return {
-      tableName: "sentTexts",
-      hasSoftDelete: false,
-      insertColumns: ["groupId", "recipientPersonId", "senderPersonId", "message", "recipientCount", "successCount", "failCount"],
-      updateColumns: ["recipientCount", "successCount", "failCount"],
-      insertLiterals: { timeSent: "NOW()" }
-    };
+export class SentTextRepo extends KyselyRepo {
+  protected readonly tableName = "sentTexts";
+  protected readonly moduleName = "messaging";
+  protected readonly softDelete = false;
+
+  public async save(model: any) {
+    if (model.id) {
+      await this.db.updateTable("sentTexts").set({
+        recipientCount: model.recipientCount,
+        successCount: model.successCount,
+        failCount: model.failCount
+      }).where("id", "=", model.id).where("churchId", "=", model.churchId).execute();
+    } else {
+      model.id = UniqueIdHelper.shortId();
+      await sql`INSERT INTO "sentTexts" (id, "churchId", "groupId", "recipientPersonId", "senderPersonId", message, "recipientCount", "successCount", "failCount", "timeSent") VALUES (${model.id}, ${model.churchId}, ${model.groupId}, ${model.recipientPersonId}, ${model.senderPersonId}, ${model.message}, ${model.recipientCount}, ${model.successCount}, ${model.failCount}, NOW())`.execute(this.db);
+    }
+    return model;
   }
 
-  public loadByChurchId(churchId: string) {
-    return TypedDB.query("SELECT * FROM sentTexts WHERE churchId=? ORDER BY timeSent DESC;", [churchId]);
+  public async loadByChurchId(churchId: string) {
+    return this.db.selectFrom("sentTexts").selectAll()
+      .where("churchId", "=", churchId)
+      .orderBy("timeSent", "desc")
+      .execute();
   }
 
-  public loadById(churchId: string, id: string) {
-    return TypedDB.queryOne("SELECT * FROM sentTexts WHERE id=? AND churchId=?;", [id, churchId]);
-  }
-
-  protected rowToModel(data: any): SentText {
-    return {
-      id: data.id,
-      churchId: data.churchId,
-      groupId: data.groupId,
-      recipientPersonId: data.recipientPersonId,
-      senderPersonId: data.senderPersonId,
-      message: data.message,
-      recipientCount: data.recipientCount,
-      successCount: data.successCount,
-      failCount: data.failCount,
-      timeSent: data.timeSent
-    };
-  }
-
-  public convertToModel(data: any) {
-    return this.rowToModel(data);
-  }
-
-  public convertAllToModel(data: any) {
-    return this.mapToModels(data);
+  public async loadById(churchId: string, id: string) {
+    return (await this.db.selectFrom("sentTexts").selectAll()
+      .where("id", "=", id)
+      .where("churchId", "=", churchId)
+      .executeTakeFirst()) ?? null;
   }
 }

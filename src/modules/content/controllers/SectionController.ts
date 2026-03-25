@@ -1,7 +1,7 @@
 import { controller, httpPost, httpGet, requestParam, httpDelete } from "inversify-express-utils";
 import express from "express";
 import { ContentBaseController } from "./ContentBaseController.js";
-import { Section } from "../models/index.js";
+import { Section, Element } from "../models/index.js";
 import { Permissions } from "../helpers/index.js";
 import { TreeHelper } from "../helpers/TreeHelper.js";
 
@@ -21,7 +21,7 @@ export class SectionController extends ContentBaseController {
       else {
         const { convertToBlock } = req.query;
         let section = await this.repos.section.load(au.churchId, id);
-        const allElements: Element[] = await this.repos.element.loadForSection(section.churchId, section.id);
+        const allElements = await this.repos.element.loadForSection(section.churchId, section.id) as any as Element[];
         section = TreeHelper.buildTree([section], allElements)[0];
         let result;
         if (convertToBlock && convertToBlock !== "") {

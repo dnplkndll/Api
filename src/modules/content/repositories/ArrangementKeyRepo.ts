@@ -1,46 +1,23 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { ArrangementKey } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class ArrangementKeyRepo extends ConfiguredRepo<ArrangementKey> {
-  protected get repoConfig(): RepoConfig<ArrangementKey> {
-    return {
-      tableName: "arrangementKeys",
-      hasSoftDelete: false,
-      columns: ["arrangementId", "keySignature", "shortDescription"]
-    };
+export class ArrangementKeyRepo extends KyselyRepo {
+  protected readonly tableName = "arrangementKeys";
+  protected readonly moduleName = "content";
+  protected readonly softDelete = false;
+
+  public async deleteForArrangement(churchId: string, arrangementId: string) {
+    await this.db.deleteFrom("arrangementKeys")
+      .where("churchId", "=", churchId)
+      .where("arrangementId", "=", arrangementId)
+      .execute();
   }
 
-  public async delete(churchId: string, id: string): Promise<any> {
-    return TypedDB.query("DELETE FROM arrangementKeys WHERE id=? AND churchId=?", [id, churchId]);
-  }
-
-  public async load(churchId: string, id: string): Promise<ArrangementKey> {
-    return TypedDB.queryOne("SELECT * FROM arrangementKeys WHERE id=? AND churchId=?", [id, churchId]);
-  }
-
-  public async loadAll(churchId: string): Promise<ArrangementKey[]> {
-    return TypedDB.query("SELECT * FROM arrangementKeys WHERE churchId=?", [churchId]);
-  }
-
-  public deleteForArrangement(churchId: string, arrangementId: string) {
-    return TypedDB.query("DELETE FROM arrangementKeys WHERE churchId=? and arrangementId=?;", [churchId, arrangementId]);
-  }
-
-  public loadByArrangementId(churchId: string, arrangementId: string) {
-    return TypedDB.query("SELECT * FROM arrangementKeys where churchId=? and arrangementId=?;", [churchId, arrangementId]);
-  }
-
-  protected rowToModel(row: any): ArrangementKey {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      arrangementId: row.arrangementId,
-      keySignature: row.keySignature,
-      shortDescription: row.shortDescription
-    };
+  public async loadByArrangementId(churchId: string, arrangementId: string) {
+    return this.db.selectFrom("arrangementKeys").selectAll()
+      .where("churchId", "=", churchId)
+      .where("arrangementId", "=", arrangementId)
+      .execute();
   }
 }

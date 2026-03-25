@@ -1,56 +1,46 @@
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { OAuthRelaySession } from "../models/index.js";
-import { DateHelper } from "../helpers/index.js";
-import { BaseRepo } from "../../../shared/infrastructure/BaseRepo.js";
 import { injectable } from "inversify";
+import { sql } from "kysely";
+import { DateHelper } from "../helpers/index.js";
+import { GlobalKyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 import crypto from "crypto";
 
 @injectable()
-export class OAuthRelaySessionRepo extends BaseRepo<OAuthRelaySession> {
-  protected tableName = "oAuthRelaySessions";
-  protected hasSoftDelete = false;
+export class OAuthRelaySessionRepo extends GlobalKyselyRepo {
+  protected readonly tableName = "oAuthRelaySessions";
+  protected readonly moduleName = "membership";
 
-  protected async create(session: OAuthRelaySession): Promise<OAuthRelaySession> {
-    session.id = this.createId();
-    const expiresAt = DateHelper.toMysqlDate(session.expiresAt);
-    const sql = `INSERT INTO oAuthRelaySessions (id, sessionCode, provider, redirectUri, status, expiresAt, createdAt)
-                 VALUES (?, ?, ?, ?, ?, ?, NOW());`;
-    const params = [
-      session.id,
-      session.sessionCode,
-      session.provider,
-      session.redirectUri,
-      session.status || "pending",
-      expiresAt
-    ];
-    await TypedDB.query(sql, params);
-    return session;
+  public async save(model: any) {
+    if (model.id) {
+      await this.db.updateTable(this.tableName).set({
+        authCode: model.authCode,
+        status: model.status
+      } as any).where("id", "=", model.id).execute();
+    } else {
+      model.id = this.createId();
+      const expiresAt = DateHelper.toMysqlDate(model.expiresAt);
+      await sql`INSERT INTO "oAuthRelaySessions" (id, "sessionCode", provider, "redirectUri", status, "expiresAt", "createdAt")
+                 VALUES (${model.id}, ${model.sessionCode}, ${model.provider}, ${model.redirectUri}, ${model.status || "pending"}, ${expiresAt}, NOW())`.execute(this.db);
+    }
+    return model;
   }
 
-  protected async update(session: OAuthRelaySession): Promise<OAuthRelaySession> {
-    const sql = "UPDATE oAuthRelaySessions SET authCode=?, status=? WHERE id=?;";
-    const params = [session.authCode, session.status, session.id];
-    await TypedDB.query(sql, params);
-    return session;
+  public async load(id: string) {
+    return await this.db.selectFrom(this.tableName).selectAll()
+      .where("id", "=", id).executeTakeFirst() ?? null;
   }
 
-  public load(id: string): Promise<OAuthRelaySession> {
-    return TypedDB.queryOne("SELECT * FROM oAuthRelaySessions WHERE id=?", [id]);
+  public async loadBySessionCode(sessionCode: string) {
+    const result = await sql`SELECT * FROM "oAuthRelaySessions" WHERE "sessionCode"=${sessionCode} AND "expiresAt" > NOW()`.execute(this.db);
+    return (result.rows as any[])[0] ?? null;
   }
 
-  public loadBySessionCode(sessionCode: string): Promise<OAuthRelaySession> {
-    return TypedDB.queryOne(
-      "SELECT * FROM oAuthRelaySessions WHERE sessionCode=? AND expiresAt > NOW()",
-      [sessionCode]
-    );
+  public async delete(id: string) {
+    await this.db.deleteFrom(this.tableName)
+      .where("id", "=", id).execute();
   }
 
-  public delete(id: string) {
-    return TypedDB.query("DELETE FROM oAuthRelaySessions WHERE id=?", [id]);
-  }
-
-  public deleteExpired() {
-    return TypedDB.query("DELETE FROM oAuthRelaySessions WHERE expiresAt < NOW()", []);
+  public async deleteExpired() {
+    await sql`DELETE FROM "oAuthRelaySessions" WHERE "expiresAt" < NOW()`.execute(this.db);
   }
 
   // Generate 8-character session code (TV-friendly, no ambiguous characters)

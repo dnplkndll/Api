@@ -1,50 +1,50 @@
 import { injectable } from "inversify";
-import { TypedDB } from "../../../shared/infrastructure/TypedDB.js";
-import { Position } from "../models/index.js";
-
-import { ConfiguredRepo, RepoConfig } from "../../../shared/infrastructure/ConfiguredRepo.js";
+import { KyselyRepo } from "../../../shared/infrastructure/KyselyRepo.js";
 
 @injectable()
-export class PositionRepo extends ConfiguredRepo<Position> {
-  protected get repoConfig(): RepoConfig<Position> {
+export class PositionRepo extends KyselyRepo {
+  protected readonly tableName = "positions";
+  protected readonly moduleName = "doing";
+  protected readonly softDelete = false;
+
+  public async deleteByPlanId(churchId: string, planId: string) {
+    await this.db.deleteFrom("positions")
+      .where("churchId", "=", churchId).where("planId", "=", planId).execute();
+  }
+
+  public async loadByIds(churchId: string, ids: string[]) {
+    return this.db.selectFrom("positions").selectAll()
+      .where("churchId", "=", churchId).where("id", "in", ids).execute();
+  }
+
+  public async loadByPlanId(churchId: string, planId: string) {
+    return this.db.selectFrom("positions").selectAll()
+      .where("churchId", "=", churchId).where("planId", "=", planId)
+      .orderBy("categoryName").orderBy("name").execute();
+  }
+
+  public async loadByPlanIds(churchId: string, planIds: string[]) {
+    return this.db.selectFrom("positions").selectAll()
+      .where("churchId", "=", churchId).where("planId", "in", planIds).execute();
+  }
+
+  public async loadSignupByPlanId(churchId: string, planId: string) {
+    return this.db.selectFrom("positions").selectAll()
+      .where("churchId", "=", churchId).where("planId", "=", planId).where("allowSelfSignup", "=", true as any)
+      .orderBy("categoryName").orderBy("name").execute();
+  }
+
+  public convertToModel(_churchId: string, data: any) {
     return {
-      tableName: "positions",
-      hasSoftDelete: false,
-      columns: ["planId", "categoryName", "name", "count", "groupId", "allowSelfSignup", "description"]
-    };
-  }
-
-  public deleteByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("DELETE FROM positions WHERE churchId=? and planId=?;", [churchId, planId]);
-  }
-
-  public loadByIds(churchId: string, ids: string[]) {
-    return TypedDB.query("SELECT * FROM positions WHERE churchId=? and id in (?);", [churchId, ids]);
-  }
-
-  public loadByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("SELECT * FROM positions WHERE churchId=? AND planId=? ORDER BY categoryName, name;", [churchId, planId]);
-  }
-
-  public loadByPlanIds(churchId: string, planIds: string[]) {
-    return TypedDB.query("SELECT * FROM positions WHERE churchId=? AND planId in (?);", [churchId, planIds]);
-  }
-
-  public loadSignupByPlanId(churchId: string, planId: string) {
-    return TypedDB.query("SELECT * FROM positions WHERE churchId=? AND planId=? AND allowSelfSignup=1 ORDER BY categoryName, name;", [churchId, planId]);
-  }
-
-  protected rowToModel(row: any): Position {
-    return {
-      id: row.id,
-      churchId: row.churchId,
-      planId: row.planId,
-      categoryName: row.categoryName,
-      name: row.name,
-      count: row.count,
-      groupId: row.groupId,
-      allowSelfSignup: row.allowSelfSignup,
-      description: row.description
+      id: data.id,
+      churchId: data.churchId,
+      planId: data.planId,
+      categoryName: data.categoryName,
+      name: data.name,
+      count: data.count,
+      groupId: data.groupId,
+      allowSelfSignup: data.allowSelfSignup,
+      description: data.description
     };
   }
 }
