@@ -23,18 +23,18 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const db = getDb("doing");
-  await sql`DELETE FROM actions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM conditions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM conjunctions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM assignments WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM times WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM planItems WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM positions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM plans WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM planTypes WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM automations WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM blockoutDates WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM tasks WHERE churchId = ${churchId}`.execute(db);
+  await sql`DELETE FROM actions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM conditions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM conjunctions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM assignments WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM times WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "planItems" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM positions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM plans WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "planTypes" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM automations WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "blockoutDates" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM tasks WHERE "churchId" = ${churchId}`.execute(db);
   await teardownTestDb();
 });
 

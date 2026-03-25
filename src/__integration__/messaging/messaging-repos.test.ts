@@ -18,14 +18,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const db = getDb("messaging");
-  await sql`DELETE FROM connections WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM notifications WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM messages WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM conversations WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM deliveryLogs WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM devices WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM emailTemplates WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM sentTexts WHERE churchId = ${churchId}`.execute(db);
+  await sql`DELETE FROM connections WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM notifications WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM messages WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM conversations WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "deliveryLogs" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM devices WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "emailTemplates" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "sentTexts" WHERE "churchId" = ${churchId}`.execute(db);
   await teardownTestDb();
 });
 

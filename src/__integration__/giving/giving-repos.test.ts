@@ -21,16 +21,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const db = getDb("giving");
-  await sql`DELETE FROM subscriptionFunds WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM subscriptions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM fundDonations WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM donations WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM donationBatches WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM eventLogs WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM gatewayPaymentMethods WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM gateways WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM funds WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM customers WHERE churchId = ${churchId}`.execute(db);
+  await sql`DELETE FROM "subscriptionFunds" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM subscriptions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "fundDonations" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM donations WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "donationBatches" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "eventLogs" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "gatewayPaymentMethods" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM gateways WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM funds WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM customers WHERE "churchId" = ${churchId}`.execute(db);
   await teardownTestDb();
 });
 

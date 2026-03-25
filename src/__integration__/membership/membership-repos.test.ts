@@ -30,24 +30,24 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const db = getDb("membership");
-  await sql`DELETE FROM answers WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM formSubmissions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM questions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM forms WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM memberPermissions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM groupMembers WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM \`groups\` WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM people WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM households WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM domains WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM rolePermissions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM roleMembers WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM roles WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM settings WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM visibilityPreferences WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM accessLogs WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM auditLogs WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM userChurches WHERE churchId = ${churchId}`.execute(db);
+  await sql`DELETE FROM answers WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "formSubmissions" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM questions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM forms WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "memberPermissions" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "groupMembers" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "groups" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM people WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM households WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM domains WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "rolePermissions" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "roleMembers" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM roles WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM settings WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "visibilityPreferences" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "accessLogs" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "auditLogs" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "userChurches" WHERE "churchId" = ${churchId}`.execute(db);
   await teardownTestDb();
 });
 
@@ -321,15 +321,15 @@ describe("VisibilityPreferenceRepo", () => {
   let vpId: string;
 
   it("should create a visibility preference", async () => {
-    const vp = await repo.save({ churchId, personId: "vpprs00001", address: "members", phoneNumber: "members", email: "members" } as any);
+    const vp = await repo.save({ churchId, personId: "vpprs000001", address: "members", phoneNumber: "members", email: "members" } as any);
     expect(vp.id).toBeDefined();
     vpId = vp.id;
   });
 
   it("should loadForPerson", async () => {
-    const result = await repo.loadForPerson(churchId, "vpprs00001");
+    const result = await repo.loadForPerson(churchId, "vpprs000001");
     expect(result).not.toBeNull();
-    expect(result.personId).toBe("vpprs00001");
+    expect(result.personId).toBe("vpprs000001");
   });
 
   it("should delete", async () => {

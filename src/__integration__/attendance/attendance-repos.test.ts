@@ -19,13 +19,13 @@ beforeAll(async () => {
 afterAll(async () => {
   // Clean up test data
   const db = getDb("attendance");
-  await sql`DELETE FROM visitSessions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM visits WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM sessions WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM groupServiceTimes WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM serviceTimes WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM services WHERE churchId = ${churchId}`.execute(db);
-  await sql`DELETE FROM campuses WHERE churchId = ${churchId}`.execute(db);
+  await sql`DELETE FROM "visitSessions" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM visits WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM sessions WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "groupServiceTimes" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM "serviceTimes" WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM services WHERE "churchId" = ${churchId}`.execute(db);
+  await sql`DELETE FROM campuses WHERE "churchId" = ${churchId}`.execute(db);
   await teardownTestDb();
 });
 
