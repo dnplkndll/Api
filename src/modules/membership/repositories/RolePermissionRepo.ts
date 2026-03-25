@@ -33,7 +33,7 @@ export class RolePermissionRepo extends KyselyRepo {
       LEFT JOIN "userChurches" uc on uc."churchId"=r."churchId" AND uc."userId" = rm."userId"
       LEFT JOIN people p on p.id = uc."personId" AND p."churchId"=uc."churchId" AND (p.removed=false OR p.removed IS NULL)
       WHERE rm."userId"=${userId}
-      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id, p."membershipStatus", c."archivedDate"
+      GROUP BY c.name, r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id, p."membershipStatus", c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
       ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action, p.id, p."membershipStatus", c."archivedDate"`.execute(this.db);
     const data = queryResult.rows as any[];
 
@@ -91,7 +91,7 @@ export class RolePermissionRepo extends KyselyRepo {
       INNER JOIN "rolePermissions" rp on rp."roleId"=r.id
       LEFT JOIN churches c on c.id=r."churchId"
       WHERE c.id=${churchId}
-      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action
+      GROUP BY c.name, r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
       ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action`.execute(this.db);
     const data = queryResult.rows as any[];
 
@@ -150,7 +150,7 @@ export class RolePermissionRepo extends KyselyRepo {
       INNER JOIN "rolePermissions" rp on (rp."roleId"=r.id or (rp."roleId" IS NULL AND rp."churchId"=rm."churchId"))
       LEFT JOIN churches c on c.id=r."churchId"
       WHERE rm."userId"=${userId} AND rm."churchId"=${churchId}
-      GROUP BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action
+      GROUP BY c.name, r."churchId", c."subDomain", rp."apiName", rp."contentType", rp."contentId", rp.action, c."archivedDate", c.address1, c.address2, c.city, c.state, c.zip, c.country
       ORDER BY c.name, r."churchId", rp."apiName", rp."contentType", rp."contentId", rp.action`.execute(this.db);
     const data = queryResult.rows as any[];
 

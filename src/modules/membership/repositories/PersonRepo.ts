@@ -151,7 +151,7 @@ export class PersonRepo extends KyselyRepo {
   }
 
   public async loadRecent(churchId: string, filterOptedOut?: boolean) {
-    const filterClause = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
+    const filterClause = filterOptedOut ? " AND (\"optedOut\" = FALSE OR \"optedOut\" IS NULL)" : "";
     const result = await sql`SELECT * FROM (SELECT * FROM people WHERE "churchId"=${churchId} AND removed=false${sql.raw(filterClause)} order by id desc limit 25) people ORDER BY "lastName", "firstName"`.execute(this.db);
     return result.rows;
   }
@@ -165,7 +165,7 @@ export class PersonRepo extends KyselyRepo {
   }
 
   public async search(churchId: string, term: string, filterOptedOut?: boolean) {
-    const filterClause = filterOptedOut ? " AND (optedOut = FALSE OR optedOut IS NULL)" : "";
+    const filterClause = filterOptedOut ? " AND (\"optedOut\" = FALSE OR \"optedOut\" IS NULL)" : "";
     const searchTerm = "%" + term.replace(" ", "%") + "%";
     const result = await sql`SELECT * FROM people WHERE "churchId"=${churchId} AND concat(COALESCE("firstName",''), ' ', COALESCE("middleName",''), ' ', COALESCE("nickName",''), ' ', COALESCE("lastName",''), ' ', COALESCE("donorNumber",'')) LIKE ${searchTerm} AND removed=false${sql.raw(filterClause)} LIMIT 100`.execute(this.db);
     return result.rows;
@@ -204,7 +204,7 @@ export class PersonRepo extends KyselyRepo {
       LEFT OUTER JOIN "serviceTimes" st on st.id = s."serviceTimeId"
       LEFT OUTER JOIN services ser on ser.id = st."serviceId"
       WHERE ${conditions}
-      GROUP BY p.id, p."displayName", p."firstName", p."lastName", p."photoUpdated"
+      GROUP BY p.id, p."churchId", p."displayName", p."firstName", p."lastName", p."photoUpdated"
       ORDER BY p."lastName", p."firstName"`.execute(this.db);
     return result.rows;
   }
